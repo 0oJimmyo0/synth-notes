@@ -1,0 +1,11 @@
+numpy
+pandas
+scikit-learn
+torch == 2.5.1
+transformers == 4.46.3
+datasets == 3.1.0
+trl == 0.12.1
+peft == 0.13.2
+bitsandbytes == 0.45.3
+sentence-transformers == 3.3.1
+tensorboard == 2.18.0

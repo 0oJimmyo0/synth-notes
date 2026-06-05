@@ -1,0 +1,32 @@
+# Configurations
+.env
+
+# Data
+*.pkl
+*.npy
+*.npz
+
+# Python
+__pycache__/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Large model weights (run initialize_model.py locally)
+initial_elm_model/*.safetensors
+initial_elm_model/model-*.safetensors
+
+# Training / generation outputs
+*outputs/
+elm_training_outputs/
+
+# Logs
+log/
+*.out
+*.err
+
+# Generated outputs
+note_analysis/
+cav_axis/output/
+compare synth note/diff_*.txt
+compare synth note/temp_*.py

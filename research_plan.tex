@@ -1,0 +1,551 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{enumitem}
+\hypersetup{colorlinks=true,linkcolor=blue,urlcolor=blue}
+
+\title{Research Plan: Synthetic Discharge Summary Generation,\\
+Embedding-Space Coverage, CAV-Guided Enrichment, and Clinical Validation}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+
+%=============================================================================
+\section*{Executive summary}
+%=============================================================================
+
+\textbf{Problem.} Clinical NLP needs large, diverse, privacy-safe clinical text, but real note corpora are restricted, biased, and unevenly distributed across patient groups and clinical scenarios.
+
+\textbf{Approach.} We build a clinically grounded pipeline that:
+\begin{enumerate}[nosep]
+  \item encodes real MIMIC-IV discharge summaries into dense embeddings,
+  \item decodes them with an \textbf{embedding-conditioned language model (ELM)},
+  \item optionally enriches the \textbf{embedding-space point distribution} using audited \textbf{Concept Activation Vector (CAV)} steering,
+  \item optionally refines outputs with a constrained \textbf{LLM editor} for clinical plausibility,
+  \item validates outputs with leakage-aware faithfulness, coverage, diversity, and privacy audits.
+\end{enumerate}
+
+\textbf{Central claim.} Low-magnitude, metadata-linked CAV steering can improve coverage of the \emph{empirical real-note embedding manifold} better than decoder randomness or unstructured noise, while preserving acceptable semantic faithfulness to the source embedding.
+
+\textbf{Near-term priority.} Validate vanilla ELM generation on the full $\sim$300k-note cohort, quantify embedding-space coverage, then introduce audited CAV steering with proper controls.
+
+\textbf{Target venue framing.} \emph{npj Digital Medicine}---a clinically grounded generation and validation protocol, not a model-engineering demo.
+
+%=============================================================================
+\section{Motivation}
+%=============================================================================
+
+Clinical NLP is limited by:
+\begin{itemize}[nosep]
+  \item restricted access to large-scale clinical text,
+  \item privacy constraints on note sharing,
+  \item uneven representation across demographics, services, admission types, and long-tail scenarios.
+\end{itemize}
+
+A useful synthetic-note pipeline must produce text that is \textbf{fluent}, \textbf{semantically faithful} to a source clinical context, \textbf{distribution-aware}, and \textbf{auditable}. We should make strong claims only where evaluation supports them.
+
+%=============================================================================
+\section{Novelty and positioning}
+%=============================================================================
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabularx}{\textwidth}{l X X}
+\toprule
+\textbf{Dimension} & \textbf{Typical baseline} & \textbf{Our approach} \\
+\midrule
+Generation control &
+  Unconstrained LLM generation from prompts &
+  Embedding-conditioned decoding tied to a real source note \\
+Semantic enrichment &
+  Prompt engineering or temperature sampling &
+  Audited CAV steering in a 1024-d embedding manifold \\
+Coverage goal &
+  ``Generate more text'' &
+  Improve occupancy of the empirical real-note embedding manifold \\
+Auditability &
+  Qualitative inspection &
+  Row-level manifest, axis audit, leakage and memorization checks \\
+Clinical plausibility &
+  Hope the model is coherent &
+  Optional constrained LLM editor with faithfulness checks \\
+\bottomrule
+\end{tabularx}
+\caption{How this project differs from prompt-only synthetic note generation.}
+\end{table}
+
+\textbf{Key baselines to compare against:}
+\begin{itemize}[nosep]
+  \item \textbf{Real held-out notes} (upper bound on content validity),
+  \item \textbf{Vanilla ELM} (our core decoder),
+  \item \textbf{GPT-only generation} conditioned on real note text or metadata (no embedding constraint),
+  \item \textbf{ELM + LLM editor} (our proposed clinically grounded variant),
+  \item \textbf{Random embedding perturbation} (unstructured noise control),
+  \item \textbf{CAV-steered ELM} (structured enrichment condition).
+\end{itemize}
+
+%=============================================================================
+\section{What is the ELM and how does it work?}
+%=============================================================================
+
+\subsection{Definition}
+
+An \textbf{embedding-conditioned language model (ELM)} is a Llama-based decoder whose input includes a \emph{domain embedding}---a dense vector summarizing a clinical note---in addition to ordinary text tokens. The model learns to generate discharge-summary text that is consistent with that embedding.
+
+In our codebase (\texttt{open-elm/src/model.py}), the ELM:
+\begin{enumerate}[nosep]
+  \item takes a 1024-dimensional sentence embedding from \texttt{BAAI/bge-large-en-v1.5},
+  \item maps it through a small adapter (Linear $\rightarrow$ ReLU $\rightarrow$ Linear) into Llama token-embedding space,
+  \item injects the adapted vector at a reserved special token position in the prompt,
+  \item autoregressively decodes a full discharge summary.
+\end{enumerate}
+
+\subsection{What the ELM does \emph{not} do}
+
+The ELM is \textbf{not} a free-form chat model. It does not invent a clinical story from a vague prompt. It decodes text \emph{conditioned on a specific point} in embedding space. This is the core constraint that makes evaluation and CAV steering meaningful.
+
+\subsection{Training setup (current cohort)}
+
+\begin{itemize}[nosep]
+  \item \textbf{Corpus:} MIMIC-IV discharge summaries aligned at note/HADM level ($\sim$332k notes embedded; $\sim$303k after long-sequence filtering).
+  \item \textbf{Split:} 80/10/10 train/dev/test at note level (leakage-aware reporting required).
+  \item \textbf{Status:} Full-cohort ELM training completed (checkpoint \texttt{checkpoint-8215}, Apr 2026).
+\end{itemize}
+
+%=============================================================================
+\section{End-to-end pipeline}
+%=============================================================================
+
+\begin{center}
+\small
+\textbf{Real MIMIC-IV discharge note}
+$\rightarrow$ \textbf{sentence embedding} (1024-d)
+$\rightarrow$ [\textbf{optional CAV shift}]
+$\rightarrow$ \textbf{ELM decode}
+$\rightarrow$ [\textbf{optional LLM editor}]
+$\rightarrow$ \textbf{synthetic discharge summary}
+$\rightarrow$ \textbf{evaluation}
+\end{center}
+
+\paragraph{Stage 1: Data prep.}
+Preprocess MIMIC-IV discharge notes; align \texttt{subject\_id}, \texttt{hadm\_id}, \texttt{note\_id}; build pickle and HuggingFace datasets.
+
+\paragraph{Stage 2: Embedding.}
+Encode each note with BGE-large; store \texttt{sentence\_embeddings.npy} and aligned metadata.
+
+\paragraph{Stage 3: ELM training.}
+Fine-tune adapter + LoRA on embedding-conditioned next-token prediction.
+
+\paragraph{Stage 4: Generation.}
+Decode synthetic notes from held-out embeddings (vanilla, multi-seed, CAV-steered, or random-shift conditions).
+
+\paragraph{Stage 5: Optional clinical editing.}
+Apply a constrained LLM rewrite pass to improve clinical coherence without breaking source semantics.
+
+\paragraph{Stage 6: Validation.}
+Faithfulness, coverage, diversity, memorization, and leakage-aware evaluation.
+
+Downstream NER pretraining is a \textbf{later} validation phase, not the current primary endpoint.
+
+%=============================================================================
+\section{Embedding-space coverage: the core geometric problem}
+%=============================================================================
+
+\subsection{What ``coverage'' means here}
+
+We work in a \textbf{high-dimensional embedding space} ($d = 1024$). Each real discharge note is a point $\mathbf{e} \in \mathbb{R}^{1024}$. Together, the $\sim$300k real notes define an \textbf{empirical manifold}---not the full ambient space, but the region actually occupied by real clinical documentation.
+
+\textbf{Coverage} means: how well does our synthetic corpus occupy that empirical manifold, especially underrepresented regions (rare services, demographic subgroups, long-tail clinical framings)?
+
+We are \textbf{not} trying to fill all of $\mathbb{R}^{1024}$. Unconstrained expansion would produce clinically meaningless text.
+
+\subsection{How to select source points for generation and enrichment}
+
+Selecting which embeddings to decode---and which to steer---is a first-class design choice. Recommended priority order:
+
+\begin{enumerate}
+  \item \textbf{Held-out real embeddings (primary evaluation).}
+    Use \texttt{encoded\_testing\_filtered} for unbiased faithfulness measurement.
+
+  \item \textbf{Under-covered regions (enrichment targets).}
+    Identify low-density areas of the real-note manifold:
+    \begin{itemize}[nosep]
+      \item cluster occupancy analysis on real-note embeddings,
+      \item distance-to-nearest-real-note for candidate synthetic points,
+      \item subgroup-stratified density (age, service, admission type, LOS, etc.).
+    \end{itemize}
+    Prioritize steering \emph{from} real held-out anchors \emph{into} under-covered but clinically plausible neighborhoods.
+
+  \item \textbf{Interpolation between real neighbors (exploratory bridge).}
+    For two real notes $\mathbf{e}_A, \mathbf{e}_B$ with similar metadata or shared admission context, test
+    $\mathbf{e}_\lambda = \mathrm{normalize}\bigl((1-\lambda)\mathbf{e}_A + \lambda \mathbf{e}_B\bigr)$
+    before CAV steering. Interpolation probes local manifold structure; CAV then provides \emph{interpretable} directed movement rather than arbitrary chord paths.
+
+  \item \textbf{Do not start with unconstrained random points.}
+    Random points in 1024-d space are almost certainly off-manifold and clinically meaningless.
+\end{enumerate}
+
+\subsection{Reference cohort for external coverage comparison}
+
+MIMIC alone defines \emph{internal} manifold coverage. To assess whether we are filling clinically relevant gaps versus merely replicating MIMIC's blind spots, we should use an \textbf{external reference cohort} as a coverage benchmark.
+
+\textbf{Proposed reference:} Yale (or another institution's) discharge-summary embedding corpus, encoded with the \textbf{same} sentence encoder (\texttt{BAAI/bge-large-en-v1.5}).
+
+\textbf{What the reference cohort enables:}
+\begin{itemize}[nosep]
+  \item \textbf{External region detection:} identify embedding regions present in Yale but sparse in MIMIC,
+  \item \textbf{Targeted enrichment:} steer MIMIC anchors toward underrepresented \emph{clinically valid} regions suggested by the reference corpus,
+  \item \textbf{Coverage comparison:} measure whether synthetic notes reduce the MIMIC--reference embedding gap without collapsing back to memorized MIMIC text,
+  \item \textbf{Sanity check:} confirm that CAV movement stays closer to the union of real manifolds than random noise does.
+\end{itemize}
+
+\textbf{Important constraint:} the reference cohort informs \emph{where to enrich}, not \emph{what PHI to copy}. All external comparisons must respect data-use agreements and privacy rules.
+
+%=============================================================================
+\section{Constraints on generated text}
+%=============================================================================
+
+Synthetic notes are constrained at four levels:
+
+\subsection{Level 1: Embedding conditioning (hard constraint)}
+
+Every synthetic note must be generated from a known source embedding $\mathbf{e}$ (or a documented steered variant $\tilde{\mathbf{e}}$). This ties the output to a specific location in semantic space and enables reproducibility via the generation manifest.
+
+\subsection{Level 2: Decoder constraints (generation-time)}
+
+\begin{itemize}[nosep]
+  \item discharge-summary format and section structure inherited from training data,
+  \item max token length, repetition penalty, temperature, top-$p$, top-$k$,
+  \item de-identification patterns preserved (e.g., \texttt{\_\_\_} placeholders for PHI).
+\end{itemize}
+
+\subsection{Level 3: Semantic faithfulness bounds (evaluation-time)}
+
+A generated note is acceptable only if it remains sufficiently close to its source embedding under re-encoding:
+\begin{itemize}[nosep]
+  \item source$\rightarrow$synthetic cosine similarity within the vanilla reference band,
+  \item stable source-note retrieval rank,
+  \item no major contradiction with source-adjacent real notes.
+\end{itemize}
+
+\subsection{Level 4: Clinical plausibility constraints (optional editor)}
+
+Even embedding-faithful text can be clinically awkward (wrong temporal logic, inconsistent service context, implausible medication sequences). An optional \textbf{LLM editor} may rewrite the note under explicit constraints:
+
+\begin{itemize}[nosep]
+  \item \textbf{Preserve:} core diagnoses, procedures, medications, disposition, and section structure unless clearly inconsistent,
+  \item \textbf{Fix:} temporal ordering, pronoun/consistency issues, missing section headers, obvious clinical incoherence,
+  \item \textbf{Forbid:} inventing new diagnoses, adding identifiable information, or large semantic departures from the ELM draft,
+  \item \textbf{Verify:} re-embed edited text; require cosine drop vs.\ source to stay within an acceptable bound relative to the unedited synthetic note.
+\end{itemize}
+
+The editor is a \textbf{clinical coherence layer}, not a second unconstrained generator. Any gain in readability must be measured against faithfulness cost.
+
+%=============================================================================
+\section{CAV steering: clinical enrichment, not random noise}
+%=============================================================================
+
+\subsection{Why CAV instead of noise?}
+
+Decoder temperature and multi-seed sampling create \textbf{surface-form} diversity (wording, phrasing) but do not systematically explore new regions of embedding space. Unstructured random perturbations $\mathbf{e} + \boldsymbol{\epsilon}$ can increase dispersion but are:
+\begin{itemize}[nosep]
+  \item hard to interpret,
+  \item likely to push off-manifold,
+  \item difficult to link to cohort structure or clinical meaning.
+\end{itemize}
+
+\textbf{CAV steering} provides \textbf{structured, auditable, metadata-linked} movement:
+\[
+\tilde{\mathbf{e}} = \mathrm{normalize}(\mathbf{e} + \alpha \mathbf{u}_j)
+\]
+where $\mathbf{u}_j$ is axis $j$ from an orthogonal axis bank derived from supervised probes on clinical metadata.
+
+\subsection{Axis-bank construction (current codebase)}
+
+\begin{enumerate}[nosep]
+  \item Join embeddings with a structured \texttt{factors.csv} (one row per note/HADM),
+  \item Fit a regularized multi-output linear probe predicting metadata factors from embeddings,
+  \item Apply SVD to the coefficient matrix to obtain orthogonal axes,
+  \item Select \texttt{recommended\_k} by held-out recovery of probe performance,
+  \item Audit each axis across $\alpha$ values for monotonicity and confounding.
+\end{enumerate}
+
+\subsection{How to select and trust an axis}
+
+An axis is \textbf{trusted} only if \emph{all} of the following hold:
+\begin{itemize}[nosep]
+  \item the linked factor is recoverable on held-out data,
+  \item steering produces monotonic movement in the intended factor,
+  \item steering does not strongly shift unrelated factors (low confounding),
+  \item ELM-decoded steered notes remain within acceptable faithfulness bounds,
+  \item steered notes improve coverage of a pre-specified underrepresented region.
+\end{itemize}
+
+\textbf{Recommended first factors} (interpretable, auditable, cohort-relevant):
+age bin, sex/gender, race/ethnicity, insurance, admission type, service, LOS bin, ICU flag, comorbidity burden bin.
+
+\textbf{Avoid initially:} disease-label axes (high hallucination risk, weak auditability).
+
+\subsection{How CAV should be used for clinically meaningful enrichment}
+
+CAV is not ``add noise and hope.'' The intended workflow:
+
+\begin{enumerate}
+  \item \textbf{Map} the real-note manifold: cluster structure, subgroup density, external reference gaps.
+  \item \textbf{Select anchor embeddings} from held-out real notes, prioritizing under-covered regions.
+  \item \textbf{Choose one trusted axis at a time} with small $|\alpha|$ (start: $\pm 0.25, \pm 0.5$).
+  \item \textbf{Normalize} after steering to remain on the unit hypersphere (same geometry as cosine metrics).
+  \item \textbf{Decode} with ELM; compare against multi-seed vanilla and random-shift controls.
+  \item \textbf{Verify} that the steered note moves the intended metadata factor \emph{and} improves local coverage without unacceptable cosine drop.
+  \item \textbf{Optionally edit} with the constrained LLM pass.
+\end{enumerate}
+
+\textbf{Random-shift control} uses perturbations matched in norm to CAV shifts but without metadata alignment. If random noise matches CAV on coverage but fails interpretability or faithfulness audits, CAV is not adding real value.
+
+\subsection{Alpha selection rule}
+
+Do not pick $\alpha$ by an arbitrary cosine threshold. Use the vanilla ELM distribution as reference. Retain a CAV setting only if:
+\begin{itemize}[nosep]
+  \item median cosine drop vs.\ vanilla is small,
+  \item coverage of target regions improves,
+  \item memorization/privacy risk does not increase,
+  \item subgroup occupancy moves in the intended direction.
+\end{itemize}
+
+%=============================================================================
+\section{Research questions}
+%=============================================================================
+
+\paragraph{RQ1. Vanilla ELM faithfulness.}
+Does vanilla ELM generation preserve source-note meaning when decoding from held-out real embeddings?
+
+\paragraph{RQ2. Embedding-space coverage.}
+Does the synthetic corpus improve occupancy of the empirical real-note manifold, including regions identified by internal density analysis and external reference-cohort comparison?
+
+\paragraph{RQ3. CAV as structured enrichment.}
+Does audited low-magnitude CAV steering improve coverage and diversity \emph{beyond} multi-seed vanilla and random perturbation, while preserving acceptable faithfulness?
+
+\paragraph{RQ4. Clinical plausibility layer.}
+Does a constrained LLM editor improve clinical coherence with acceptable semantic cost, and does \textbf{ELM + editor} outperform \textbf{GPT-only} generation on faithfulness--plausibility tradeoffs?
+
+%=============================================================================
+\section{Evaluation plan}
+%=============================================================================
+
+\subsection{Faithfulness (three levels)}
+
+\textbf{Level 1---Source-conditional:}
+source$\leftrightarrow$synthetic embedding cosine, retrieval rank, top-$k$ source neighborhood recovery.
+
+\textbf{Level 2---Clinical content:}
+entity overlap (diagnosis, medication, procedure, lab, symptom), section-presence similarity, contradiction/hallucination audit, optional manual review.
+
+\textbf{Level 3---Corpus distribution:}
+MMD / energy distance, $k$NN precision/recall, nearest-real-note distance, cluster occupancy.
+
+\subsection{Diversity}
+
+Pairwise embedding distance among variants from the same source; entity and section diversity; length variability. Key comparison: \textbf{CAV vs.\ multi-seed vanilla}.
+
+\subsection{Coverage}
+
+Cluster occupancy over real-note clusters; coverage of low-density clusters; subgroup coverage by metadata; external reference-cohort gap reduction.
+
+\subsection{Memorization and privacy}
+
+Exact duplicates, high $n$-gram overlap, nearest-neighbor lexical and embedding similarity to training notes, PHI-like pattern scans, stratification by patient/admission overlap.
+
+\subsection{Leakage-aware reporting}
+
+The ELM uses a note-level split. Report:
+\begin{itemize}[nosep]
+  \item overlap audit by \texttt{subject\_id}, \texttt{hadm\_id}, \texttt{note\_id},
+  \item primary metrics on patient-disjoint held-out subset where possible,
+  \item full held-out note-level results as secondary,
+  \item stratification by overlap status.
+\end{itemize}
+
+%=============================================================================
+\section{Required outputs and baselines}
+%=============================================================================
+
+\subsection{Generation conditions}
+
+\begin{itemize}[nosep]
+  \item \texttt{vanilla} --- single seed,
+  \item \texttt{multiseed\_vanilla} --- decoder randomness control,
+  \item \texttt{random\_shift} --- unstructured noise control,
+  \item \texttt{cav\_steered} --- low-alpha audited steering,
+  \item \texttt{high\_alpha\_cav} --- over-steering failure mode,
+  \item \texttt{elm\_edited} --- ELM output + constrained LLM editor,
+  \item \texttt{gpt\_only} --- prompt-only baseline (no embedding conditioning).
+\end{itemize}
+
+\subsection{Structured generation manifest (required)}
+
+Each generated note must include row-level provenance:
+\texttt{source\_row\_id}, \texttt{note\_id}, \texttt{subject\_id}, \texttt{hadm\_id}, split, \texttt{generation\_condition}, source embedding id, seed, axis id/label, $\alpha$, normalization flag, decoding parameters, generated text, word count, success/empty/collapse flags, and post-edit faithfulness if applicable.
+
+\subsection{Immediate deliverables (Phase 1)}
+
+\begin{itemize}[nosep]
+  \item \texttt{synthetic\_notes\_baseline.txt},
+  \item \texttt{synthetic\_generation\_manifest\_baseline.jsonl} (or \texttt{.parquet}),
+  \item \texttt{generation\_audit\_baseline.json} and \texttt{.md}.
+\end{itemize}
+
+%=============================================================================
+\section{Current status}
+%=============================================================================
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabularx}{\textwidth}{l l X}
+\toprule
+\textbf{Stage} & \textbf{Status} & \textbf{Notes} \\
+\midrule
+MIMIC-IV prep + HADM alignment & Done & $\sim$332k discharge notes \\
+Sentence embeddings & Done & BGE-large, $(331793, 1024)$ \\
+HF datasets + filtering & Done & $\sim$303k filtered train/dev/test \\
+ELM training (full cohort) & Done & \texttt{checkpoint-8215}, Apr 2026 \\
+Vanilla generation (new model) & \textbf{Next} & Update paths from pilot run \\
+Structured manifest & Not yet & Required for evaluation \\
+Coverage analysis & Not yet & Internal clusters + Yale reference \\
+CAV axis bank on real cohort & Not yet & Need \texttt{factors.csv} \\
+CAV-steered generation & Not yet & Bridge script needed \\
+LLM editor pipeline & Not yet & Optional Phase 1b/2 \\
+Full evaluation suite & Partial & Basic cosine on pilot model only \\
+\bottomrule
+\end{tabularx}
+\caption{Project status as of Apr 2026.}
+\end{table}
+
+%=============================================================================
+\section{Work queue}
+%=============================================================================
+
+\subsection*{Phase 1: Vanilla baseline (immediate)}
+\begin{itemize}[nosep]
+  \item Point generation script to new checkpoint (\texttt{checkpoint-8215}) and pi data path,
+  \item Smoke test on \texttt{encoded\_testing\_filtered},
+  \item Full held-out baseline generation,
+  \item Structured manifest + basic generation audit.
+\end{itemize}
+
+\subsection*{Phase 2: Coverage infrastructure}
+\begin{itemize}[nosep]
+  \item Cluster the real-note embedding manifold; identify low-density regions,
+  \item Encode external reference cohort (Yale) with same encoder; compute MIMIC--reference gap,
+  \item Define under-covered target regions for enrichment,
+  \item Implement coverage metrics (occupancy, $k$NN recall, subgroup stratification).
+\end{itemize}
+
+\subsection*{Phase 3: Axis bank}
+\begin{itemize}[nosep]
+  \item Build \texttt{factors.csv} aligned to embedding metadata,
+  \item Fit and audit axis bank; select 1--3 trusted axes,
+  \item Compare axis effects against interpolation and random-shift baselines.
+\end{itemize}
+
+\subsection*{Phase 4: CAV-steered generation}
+\begin{itemize}[nosep]
+  \item Integrate steering into generation pipeline,
+  \item Generate low/high-alpha and control conditions,
+  \item Save all outputs in unified manifest.
+\end{itemize}
+
+\subsection*{Phase 5: Clinical editing + baselines}
+\begin{itemize}[nosep]
+  \item Implement constrained LLM editor with faithfulness guardrails,
+  \item Run GPT-only baseline on matched source notes,
+  \item Compare ELM, ELM+editor, and GPT-only on plausibility and faithfulness.
+\end{itemize}
+
+\subsection*{Phase 6: Comparative evaluation and reporting}
+\begin{itemize}[nosep]
+  \item Compare all generation conditions on faithfulness, diversity, coverage, memorization,
+  \item Select safe $\alpha$ values and editor settings,
+  \item Produce summary report and manuscript-ready figures.
+\end{itemize}
+
+\subsection*{Phase 7: Later validation}
+\begin{itemize}[nosep]
+  \item Downstream NER continued pretraining after generation story is stable.
+\end{itemize}
+
+%=============================================================================
+\section{Success criteria}
+%=============================================================================
+
+\begin{longtable}{p{2.8cm} p{3.2cm} p{3.8cm} p{3.8cm}}
+\toprule
+\textbf{Criterion} & \textbf{Metric} & \textbf{Expected result} & \textbf{Failure mode} \\
+\midrule
+Readable vanilla outputs & empty/collapse rate, manual review & low failure rate; plausible discharge format & loops, empty output, malformed structure \\
+Faithful vanilla outputs & source cosine, retrieval rank & strong baseline ($\sim$0.80+ cosine) & semantic mismatch \\
+Coverage improvement & cluster occupancy, ref-cohort gap & synthetic corpus fills under-covered regions & no gain over real subset \\
+CAV beats noise & coverage + interpretability vs.\ random shift & structured, factor-linked enrichment & random shift equally effective \\
+CAV preserves faithfulness & relative cosine drop & modest loss only & major drift \\
+Editor helps plausibility & clinical audit, contradiction rate & better coherence, bounded cosine cost & editor rewrites too much \\
+No privacy red flags & duplicate/$n$-gram/PHI audit & no major leakage & near-duplicate replay \\
+\bottomrule
+\end{longtable}
+
+%=============================================================================
+\section{Recommended figures for a future manuscript}
+%=============================================================================
+
+\begin{itemize}[nosep]
+  \item Pipeline diagram (embed $\rightarrow$ ELM $\rightarrow$ CAV $\rightarrow$ editor $\rightarrow$ eval),
+  \item 2D/3D embedding-space coverage map (MIMIC, synthetic, reference cohort),
+  \item Vanilla generation quality table,
+  \item Axis audit and alpha tradeoff curves,
+  \item Faithfulness--diversity--coverage tradeoff plot,
+  \item Memorization/privacy audit table,
+  \item Side-by-side examples: real source vs.\ vanilla vs.\ CAV-steered vs.\ edited.
+\end{itemize}
+
+%=============================================================================
+\section{Conclusion}
+%=============================================================================
+
+The scientific goal is a \textbf{clinically grounded, leakage-aware} framework for synthetic discharge-summary generation. The ELM provides embedding-tied decoding; CAV provides \textbf{interpretable manifold enrichment} rather than random noise; coverage analysis in high-dimensional space---with an external reference cohort---tells us \emph{where} to enrich; and an optional constrained LLM editor addresses \emph{clinical plausibility} without abandoning semantic accountability.
+
+\textbf{Immediate next step:} validate vanilla ELM generation on the full cohort with structured provenance, then build the coverage map that determines where CAV steering should operate.
+
+\begin{thebibliography}{99}
+\bibitem{xu2021synthetic}
+Xu, J., Liu, T., Pakhomov, S., et al.
+\newblock Are synthetic clinical notes useful for real natural language processing tasks: a case study on clinical entity recognition.
+\newblock \emph{Journal of the American Medical Informatics Association}, 28(10):2193--2201, 2021.
+
+\bibitem{melamud2019towards}
+Melamud, O. and Shivade, C.
+\newblock Towards automatic generation of shareable synthetic clinical notes using neural language models.
+\newblock In \emph{Proc.\ of the 2nd Clinical NLP Workshop}, 2019.
+
+\bibitem{kim2018interpretability}
+Kim, B., Wattenberg, M., Gilmer, J., et al.
+\newblock Interpretability beyond feature attribution: quantitative testing with concept activation vectors (TCAV).
+\newblock In \emph{ICML}, 2018.
+
+\bibitem{carlini2021extracting}
+Carlini, N., Tramer, F., Wallace, E., et al.
+\newblock Extracting training data from large language models.
+\newblock In \emph{USENIX Security}, 2021.
+
+\bibitem{openelm_readme}
+Open-ELM repository (project internal).
+\newblock \texttt{embedding\_elm/open-elm/README.md}, \texttt{src/model.py}.
+\end{thebibliography}
+
+\end{document}

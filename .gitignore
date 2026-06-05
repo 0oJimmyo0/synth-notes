@@ -1,0 +1,60 @@
+# Environment and secrets
+.env
+.env.*
+*.pem
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Data artifacts (keep scripts, not data)
+*.pkl
+*.npy
+*.npz
+*.parquet
+*.csv
+!**/requirements.txt
+
+# Large model weights and training outputs
+open-elm/initial_elm_model/*.safetensors
+open-elm/initial_elm_model/model-*.safetensors
+**/elm_training_outputs/
+**/synthetic_notes/
+**/encoded_training*/
+**/encoded_dev*/
+**/encoded_testing*/
+**/embeddings*/
+**/pickle_ds*/
+**/data_note_hadm_all/
+
+# Logs and job artifacts
+*.log
+*.out
+*.err
+*.pid
+open-elm/log/
+sentence_embedding_generation.*
+
+# Generated analysis outputs
+open-elm/note_analysis/
+open-elm/compare synth note/diff_*.txt
+open-elm/compare synth note/temp_*.py
+open-elm/cav_axis/output/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~
+
+# Nested git history (open-elm was cloned separately)
+open-elm/.git/
