@@ -2,7 +2,7 @@
 #SBATCH --job-name=elm_generate
 #SBATCH --output=/dev/null
 #SBATCH --error=/dev/null
-#SBATCH --time=36:00:00
+#SBATCH --time=44:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
@@ -119,7 +119,11 @@ echo ""
 # Baseline default: single held-out split only
 DATASET_PATH="${DATASET_PATH:-${DATAHOME}encoded_testing_filtered}"
 OUTPUT_FILE="${OUTPUT_FILE:-${OUTPUT_DIR}/synthetic_notes_test_vanilla_seed42.txt}"
+MANIFEST_FILE="${MANIFEST_FILE:-${OUTPUT_DIR}/synthetic_notes_test_vanilla_seed42_manifest.jsonl}"
 DATASET_PATHS="${DATASET_PATHS:-}"   # Keep empty for single split; set only for Option B/C
+SPLIT_NAME="${SPLIT_NAME:-test}"
+GENERATION_CONDITION="${GENERATION_CONDITION:-vanilla}"
+SPLIT_MANIFEST_PATH="${SPLIT_MANIFEST_PATH:-${DATAHOME}leakage_audit/split_manifest_note_level.csv}"
 SEED="${SEED:-42}"
 
 # Check dataset exists (use first path if using DATASET_PATHS)
@@ -138,6 +142,7 @@ fi
 
 echo "Generating synthetic notes from: ${DATASET_PATHS:-$DATASET_PATH}"
 echo "Output will be saved to: ${OUTPUT_FILE}"
+echo "Manifest will be saved to: ${MANIFEST_FILE}"
 echo "Sampling seed: ${SEED}"
 echo "Data root: ${DATAHOME}"
 echo ""
@@ -149,6 +154,9 @@ python "${SCRIPT_DIR}/generate_synthetic_notes.py" \
     --backbone_model_path "${BACKBONE_MODEL}" \
     --dataset_paths "${DATASET_PATHS}" \
     --output_file "${OUTPUT_FILE}" \
+    --manifest_output "${MANIFEST_FILE}" \
+    --generation_condition "${GENERATION_CONDITION}" \
+    --split_manifest_path "${SPLIT_MANIFEST_PATH}" \
     --batch_size 8 \
     --repetition_penalty 1.2 \
     --temperature 0.8 \
@@ -163,6 +171,10 @@ python "${SCRIPT_DIR}/generate_synthetic_notes.py" \
     --backbone_model_path "${BACKBONE_MODEL}" \
     --dataset_path "${DATASET_PATH}" \
     --output_file "${OUTPUT_FILE}" \
+    --manifest_output "${MANIFEST_FILE}" \
+    --generation_condition "${GENERATION_CONDITION}" \
+    --split "${SPLIT_NAME}" \
+    --split_manifest_path "${SPLIT_MANIFEST_PATH}" \
     --batch_size 8 \
     --repetition_penalty 1.2 \
     --temperature 0.8 \
@@ -190,6 +202,7 @@ echo "Generation completed successfully!"
 echo "Job ID: $SLURM_JOB_ID"
 echo "End Time: $(date)"
 echo "Output file: ${OUTPUT_FILE}"
+echo "Manifest file: ${MANIFEST_FILE}"
 echo "Check logs: ${LOG_DIR}/generate_synthetic_notes_${SLURM_JOB_ID}.out"
 echo "=========================================="
 

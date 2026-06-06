@@ -77,15 +77,22 @@ def assign_splits(
         shuffle=True,
     )
 
-    train_df = train_df.copy()
-    dev_df = dev_df.copy()
-    test_df = test_df.copy()
+    train_df = train_df.copy().reset_index(drop=True)
+    dev_df = dev_df.copy().reset_index(drop=True)
+    test_df = test_df.copy().reset_index(drop=True)
+
     train_df["split"] = "train"
     dev_df["split"] = "dev"
     test_df["split"] = "test"
 
+    train_df["dataset_row_id"] = range(len(train_df))
+    dev_df["dataset_row_id"] = range(len(dev_df))
+    test_df["dataset_row_id"] = range(len(test_df))
+
+    for df in (train_df, dev_df, test_df):
+        df["source_row_id"] = df["embedding_row_id"]
+
     combined = pd.concat([train_df, dev_df, test_df], ignore_index=True)
-    combined = combined.sort_values("embedding_row_id").reset_index(drop=True)
     return combined
 
 
@@ -204,6 +211,38 @@ def main() -> None:
 
     train_subjects = set(splits["train"]["subject_id"].dropna().tolist())
     train_hadms = set(splits["train"]["hadm_id"].dropna().tolist())
+    train_notes = set(splits["train"]["note_id"].dropna().tolist())
+
+    split_manifest["patient_overlap_with_train"] = split_manifest["subject_id"].isin(train_subjects)
+    split_manifest["hadm_overlap_with_train"] = split_manifest["hadm_id"].isin(train_hadms)
+    split_manifest["note_overlap_with_train"] = split_manifest["note_id"].isin(train_notes)
+    split_manifest["patient_disjoint_from_train"] = ~split_manifest["patient_overlap_with_train"]
+    split_manifest["hadm_disjoint_from_train"] = ~split_manifest["hadm_overlap_with_train"]
+    split_manifest["note_disjoint_from_train"] = ~split_manifest["note_overlap_with_train"]
+
+    split_manifest = split_manifest.loc[
+        :,
+        [
+            "source_row_id",
+            "dataset_row_id",
+            "embedding_row_id",
+            "split",
+            "filename",
+            "note_id",
+            "subject_id",
+            "hadm_id",
+            "note_type",
+            "charttime",
+            "text_length",
+            "text_preview",
+            "patient_overlap_with_train",
+            "hadm_overlap_with_train",
+            "note_overlap_with_train",
+            "patient_disjoint_from_train",
+            "hadm_disjoint_from_train",
+            "note_disjoint_from_train",
+        ],
+    ]
 
     split_stats = {
         split_name: summarize_split_rows(split_df, train_subjects, train_hadms)
@@ -214,6 +253,7 @@ def main() -> None:
         "metadata_path": str(metadata_path),
         "n_rows_total": int(len(split_manifest)),
         "split_sizes": {name: int(len(df)) for name, df in splits.items()},
+        "split_manifest_columns": split_manifest.columns.tolist(),
         "split_stats": split_stats,
         "overlap_records": overlap_rows,
         "interpretation": {
