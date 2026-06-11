@@ -419,3 +419,44 @@ Operational note:
 
 - a 2-GPU request alone would not speed generation unless the script itself shards work
 - the new launcher implements that sharded workflow explicitly
+
+## Phase 1 Prep Folder
+
+Prepared under:
+
+- `embedding_elm/open-elm/phase1_prep/`
+
+Files added:
+
+- `run_audit_vanilla_generation.sh`
+  - exact post-generation audit command for the official vanilla manifest
+- `manual_review_rubric_50.csv`
+  - 50-row blank rubric with fields for readability, discharge-summary structure, repetition/collapse, section layout, hallucination, PHI-like leakage, source-conditioned feel, and pass/fail
+- `manifest_integrity_template.csv`
+- `quality_metrics_template.csv`
+- `faithfulness_metrics_template.csv`
+- `full_vs_patient_disjoint_template.csv`
+- `privacy_memorization_warnings_template.csv`
+- `coverage_mapping_config.yaml`
+  - real held-out coverage prep only; blocked until synthetic notes are re-embedded and vanilla audit is PASS/CAUTION
+- `factors.csv`
+  - candidate future CAV factor spec, not a fitted axis-bank input yet
+
+## Incomplete Vanilla Output Quick Read
+
+The old timeout-truncated vanilla file still provides a useful qualitative preview:
+
+- path: `.../synthetic_notes_test_vanilla_seed42.txt`
+- note headers present: `22,592`
+- first note clearly has discharge-summary style fields such as:
+  - `Admission Date`
+  - `Discharge Date`
+  - `Service`
+  - `Allergies`
+  - `Chief Complaint`
+  - `Major Surgical or Invasive Procedure`
+
+Interpretation:
+
+- the model is producing free-text synthetic clinical notes in discharge-summary-like format
+- but the incomplete run is not an official baseline because it timed out and has no valid manifest

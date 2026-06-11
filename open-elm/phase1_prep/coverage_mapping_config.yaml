@@ -1,0 +1,38 @@
+phase: phase1_prep_only
+status: do_not_run_until_vanilla_audit_pass
+
+inputs:
+  real_dataset_path: /gpfs/radev/pi/xu_hua/shared/datasets/synthnote/mimiciv/3.1/data_note_hadm_all/clinic_notes/1_task/encoded_testing_filtered
+  real_split_manifest_path: /gpfs/radev/pi/xu_hua/shared/datasets/synthnote/mimiciv/3.1/data_note_hadm_all/clinic_notes/1_task/leakage_audit/split_manifest_note_level.csv
+  whole_cohort_manifest_path: /gpfs/radev/pi/xu_hua/shared/datasets/synthnote/mimiciv/3.1/data_note_hadm_all/clinic_notes/1_task/leakage_audit/split_manifest_note_level_full.csv
+  embedding_metadata_path: /gpfs/radev/pi/xu_hua/shared/datasets/synthnote/mimiciv/3.1/embeddings-BAAI-bge-large-en-v1.5/sentence_embeddings_metadata.csv
+  expected_vanilla_manifest_path: /gpfs/radev/pi/xu_hua/shared/datasets/synthnote/mimiciv/3.1/data_note_hadm_all/clinic_notes/1_task/synthetic_notes/synthetic_notes_test_vanilla_seed42_manifest.jsonl
+  expected_reembedded_synthetic_output_path: /gpfs/radev/pi/xu_hua/shared/datasets/synthnote/mimiciv/3.1/data_note_hadm_all/clinic_notes/1_task/generation_audit/vanilla_test_seed42/generated_note_embeddings_bge_large.npy
+
+guards:
+  require_vanilla_audit_status_one_of:
+    - PASS
+    - CAUTION
+  require_manifest_row_match: true
+  require_patient_disjoint_reporting: true
+  require_synthetic_reembedding: true
+  block_if_manifest_missing: true
+
+coverage_plan:
+  embedding_space: empirical_real_note_manifold_only
+  reference_group: real_held_out_test
+  comparison_group: vanilla_synthetic_test
+  subgroup_views:
+    - full_test
+    - patient_disjoint_test
+    - patient_overlap_test
+  deferred_until_ready:
+    - real_vs_synthetic_cluster_occupancy
+    - low_density_region_coverage
+    - nearest_real_neighbor_distance
+    - subgroup_coverage_summary
+
+candidate_outputs:
+  coverage_summary_json: /gpfs/radev/pi/xu_hua/shared/datasets/synthnote/mimiciv/3.1/data_note_hadm_all/clinic_notes/1_task/coverage/vanilla_test_seed42/coverage_summary.json
+  coverage_summary_md: /gpfs/radev/pi/xu_hua/shared/datasets/synthnote/mimiciv/3.1/data_note_hadm_all/clinic_notes/1_task/coverage/vanilla_test_seed42/coverage_summary.md
+  cluster_table_csv: /gpfs/radev/pi/xu_hua/shared/datasets/synthnote/mimiciv/3.1/data_note_hadm_all/clinic_notes/1_task/coverage/vanilla_test_seed42/cluster_occupancy.csv
