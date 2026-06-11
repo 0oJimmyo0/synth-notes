@@ -33,7 +33,7 @@ An embedding-conditioned language model (ELM) can decode discharge summaries fro
 \end{quote}
 
 \textbf{Phase 1 milestone (first manuscript-ready block).}
-Vanilla ELM generation, structured generation manifest, leakage audit reporting, baseline faithfulness/quality audit, and initial internal coverage mapping.
+Vanilla ELM generation, a two-layer provenance system (whole-cohort source manifest + filtered-aligned generation manifest), leakage audit reporting, baseline faithfulness/quality audit, and initial internal coverage mapping.
 
 \textbf{Extensions (Phase 2/3, not required for Phase 1).}
 CAV axis bank and controlled steering; optional LLM editor; reference-guided external coverage analysis if available; downstream clinical entity extraction validation.
@@ -143,10 +143,10 @@ The novelty is the \textbf{combined validation framework}:
 \begin{minipage}{0.97\textwidth}
 \vspace{0.25em}
 \textbf{Leakage statement.}
-The current cohort uses a \textbf{note-level and HADM-disjoint} 80/10/10 split, but it is \textbf{not fully patient-disjoint}. Notes and admissions do not overlap across train and held-out splits, but many held-out patients also appear in training.
+The current cohort uses a \textbf{note-level and HADM-disjoint} 80/10/10 split, but it is \textbf{not fully patient-disjoint}. Notes and admissions do not overlap across train and held-out splits in the pre-filter split assignment, but many held-out patients also appear in training.
 
 \vspace{0.4em}
-\textbf{Audited overlap (full test split, $n=33{,}180$ notes):}
+\textbf{Pre-filter audited overlap (full test split, $n=33{,}180$ notes):}
 \begin{itemize}[nosep,leftmargin=*]
   \item \texttt{note\_id} overlap with train: \textbf{0}
   \item \texttt{hadm\_id} overlap with train: \textbf{0}
@@ -157,8 +157,18 @@ The current cohort uses a \textbf{note-level and HADM-disjoint} 80/10/10 split, 
 Dev split shows the same pattern: 0 note/HADM overlap; 9,883 / 33,179 patient-disjoint rows (29.8\%).
 
 \vspace{0.4em}
+\textbf{Important implementation correction.}
+Generation and training use \texttt{encoded\_\*\_filtered} datasets created \emph{after} long-sequence filtering. Those filtered datasets are smaller than the pre-filter split:
+\begin{itemize}[nosep,leftmargin=*]
+  \item train: 265,434 $\rightarrow$ 262,895
+  \item dev: 33,179 $\rightarrow$ 32,847
+  \item test: 33,180 $\rightarrow$ 32,843
+\end{itemize}
+Therefore, the \textbf{canonical downstream leakage manifest must be regenerated against the filtered HF datasets}, not only the pre-filter metadata split. The pre-filter overlap table remains useful as source provenance, but official generation/evaluation joins must use the filtered-aligned manifest.
+
+\vspace{0.4em}
 \textbf{Reporting policy.}
-We will report full held-out note-level results as secondary and treat \textbf{patient-disjoint held-out rows as the primary sensitivity subset} wherever sample size permits. All generation manifest rows will carry \texttt{patient\_overlap\_with\_train} and \texttt{hadm\_overlap\_with\_train} flags.
+We will report full held-out note-level results as secondary and treat \textbf{patient-disjoint held-out rows as the primary sensitivity subset} wherever sample size permits. All generation manifest rows will carry \texttt{patient\_overlap\_with\_train} and \texttt{hadm\_overlap\_with\_train} flags from the \textbf{filtered-aligned} train split.
 \vspace{0.25em}
 \end{minipage}}
 
@@ -188,10 +198,22 @@ An \textbf{embedding-conditioned language model} decodes text from a fixed sourc
 
 \begin{itemize}[nosep]
   \item MIMIC-IV discharge summaries, note/HADM aligned: $\sim$332k notes embedded
-  \item Filtered ELM cohort: $\sim$303k notes (train 262,895; dev 32,847; test $\sim$6,981 filtered)
+  \item Full split before long-sequence filtering: train 265,434; dev 33,179; test 33,180
+  \item Filtered ELM cohort used by the model: train 262,895; dev 32,847; test 32,843
+  \item Rows removed by long-sequence filtering: 2,539 train; 332 dev; 337 test (3,208 total)
   \item ELM training complete: \texttt{checkpoint-8215} (Apr 2026)
-  \item Leakage audit complete: Jun 2026
+  \item Pre-filter leakage audit complete; filtered-aligned leakage manifest refresh required before official vanilla rerun
 \end{itemize}
+
+\subsection{Manifest architecture}
+
+Phase 1 now requires \textbf{two linked manifest layers}:
+\begin{enumerate}[nosep]
+  \item \textbf{Whole-cohort source manifest:} every embedding row, split assignment, and source metadata, preserved as the stable provenance table for the full cohort.
+  \item \textbf{Filtered-aligned split manifest:} only rows that survive long-sequence filtering, with \texttt{dataset\_row\_id} matching \texttt{encoded\_\*\_filtered}. This is the canonical join target for vanilla generation and auditing.
+\end{enumerate}
+
+Later generation conditions (multi-seed vanilla, random shift, CAV, optional editor) should \textbf{not} overwrite the source manifest. Instead, they should write new generation manifests referencing the same stable \texttt{source\_row\_id}/\texttt{embedding\_row\_id} plus condition-specific fields such as axis id, $\alpha$, normalization flag, or editor model.
 
 %=============================================================================
 \section{Research questions}
@@ -277,8 +299,9 @@ Phase 1 establishes whether the core decoder is scientifically usable before any
 
 \begin{enumerate}[nosep]
   \item Vanilla ELM generation from \texttt{encoded\_testing\_filtered} using \texttt{checkpoint-8215},
+  \item Whole-cohort source manifest plus filtered-aligned split manifest,
   \item Structured generation manifest with row-level provenance,
-  \item Leakage flags on every generated row,
+  \item Leakage flags on every generated row, joined from the filtered-aligned split manifest,
   \item Baseline faithfulness and quality audit (cosine, retrieval, length/collapse, entity overlap sample),
   \item Initial internal coverage map of real vs.\ vanilla synthetic embeddings.
 \end{enumerate}
@@ -299,6 +322,7 @@ These are scientifically important but \textbf{not dependencies} for the first m
 \begin{itemize}[nosep]
   \item \texttt{synthetic\_notes\_baseline.txt}
   \item \texttt{synthetic\_generation\_manifest\_baseline.jsonl} (or \texttt{.parquet})
+  \item \texttt{split\_manifest\_note\_level\_full.csv} + \texttt{split\_manifest\_note\_level.csv}
   \item \texttt{generation\_audit\_baseline.json} and \texttt{generation\_audit\_baseline.md}
   \item patient-disjoint and full held-out evaluation tables
 \end{itemize}
@@ -354,7 +378,10 @@ Random shifts match CAV coverage &
   Norm-matched random perturbation control \\
 Patient overlap inflates results &
   Held-out notes may be too easy for memorization-adjacent patients &
-  Patient-disjoint primary sensitivity subset (9,949 test rows) \\
+  Patient-disjoint primary sensitivity subset defined from the filtered-aligned manifest \\
+Manifest drift after filtering &
+  Pre-filter split metadata can stop matching the actual HF datasets used by the model &
+  Maintain both source manifest and filtered-aligned manifest; use filtered manifest for all generation/audit joins \\
 Synthetic notes memorize training text &
   Privacy and scientific invalidity &
   Duplicate, $n$-gram, NN, and PHI-pattern audits \\
@@ -383,8 +410,9 @@ Sentence embeddings ($\sim$332k) & \textbf{Done} & --- \\
 HF datasets + long-sequence filter & \textbf{Done} & --- \\
 ELM training (\texttt{checkpoint-8215}) & \textbf{Done} & --- \\
 Leakage audit & \textbf{Done} & Report in all evaluations \\
-Vanilla held-out generation & \textbf{Running} & Use new checkpoint + pi paths \\
-Structured manifest + vanilla audit & \textbf{Immediate next} & Phase 1 deliverable \\
+Filtered-aligned leakage manifest refresh & \textbf{Immediate next} & Regenerate canonical split manifest against \texttt{encoded\_\*\_filtered} \\
+Vanilla held-out generation & \textbf{Blocked on manifest refresh} & Rerun with complete wall time + filtered-aligned manifest \\
+Structured manifest + vanilla audit & \textbf{Immediate after rerun} & Phase 1 deliverable \\
 Initial coverage mapping & Planned & After vanilla baseline \\
 CAV axis bank + steering & Phase 2 & After Phase 1 gate \\
 LLM editor / external reference / NER & Phase 3 & Extensions only \\
@@ -415,6 +443,8 @@ This appendix preserves technical detail for the engineering team without front-
 \subsection{Generation manifest fields}
 
 Each row should record: \texttt{source\_row\_id}, \texttt{note\_id}, \texttt{subject\_id}, \texttt{hadm\_id}, split, \texttt{generation\_condition}, source embedding id, seed, axis id/label, $\alpha$, normalization flag, decoding parameters, generated text, word count, success/empty/collapse flags, \texttt{patient\_overlap\_with\_train}, \texttt{hadm\_overlap\_with\_train}.
+
+The stable source manifest should additionally preserve \texttt{embedding\_row\_id}, full-split \texttt{dataset\_row\_id\_full}, filtered \texttt{dataset\_row\_id} if retained, and a \texttt{kept\_after\_filter} flag.
 
 Recommended \texttt{generation\_condition} values for later phases: \texttt{vanilla}, \texttt{multiseed\_vanilla}, \texttt{random\_shift}, \texttt{cav\_steered}, \texttt{high\_alpha\_cav}, \texttt{elm\_edited}.
 

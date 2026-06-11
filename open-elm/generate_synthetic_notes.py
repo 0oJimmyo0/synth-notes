@@ -132,6 +132,18 @@ def parse_args() -> argparse.Namespace:
         help="Maximum number of samples to generate (None = all)",
     )
     parser.add_argument("--seed", type=int, default=42, help="Random seed for sampling")
+    parser.add_argument(
+        "--start_index",
+        type=int,
+        default=0,
+        help="Inclusive start index into the loaded embedding rows for sharded generation",
+    )
+    parser.add_argument(
+        "--end_index",
+        type=int,
+        default=None,
+        help="Exclusive end index into the loaded embedding rows for sharded generation",
+    )
     return parser.parse_args()
 
 
@@ -365,6 +377,8 @@ def build_run_metadata(
         "device": args.device,
         "max_samples": args.max_samples,
         "seed": args.seed,
+        "start_index": args.start_index,
+        "end_index": args.end_index,
     }
 
     return {
@@ -506,6 +520,21 @@ def main() -> None:
 
     validate_source_records(source_records, embeddings, split_manifest_path)
 
+    total_loaded = len(embeddings)
+    slice_start = max(0, int(args.start_index))
+    slice_end = total_loaded if args.end_index is None else min(int(args.end_index), total_loaded)
+    if slice_start >= slice_end:
+        raise ValueError(
+            f"Invalid shard bounds: start_index={slice_start}, end_index={slice_end}, total_loaded={total_loaded}"
+        )
+
+    if slice_start != 0 or slice_end != total_loaded:
+        embeddings = embeddings[slice_start:slice_end]
+        source_records = source_records[slice_start:slice_end]
+        print(f"Applied shard slice: [{slice_start}, {slice_end}) -> {len(embeddings)} rows")
+    else:
+        print("Applied shard slice: full dataset")
+
     print(f"Embedding dimension: {len(embeddings[0])}")
     print("")
 
@@ -565,7 +594,7 @@ def main() -> None:
                 )
 
             for offset, note in enumerate(generated_notes):
-                generation_index = batch_start + offset
+                generation_index = slice_start + batch_start + offset
                 generation_id = f"{run_id}-{generation_index:08d}"
                 if generation_id in generation_ids:
                     raise ValueError(f"Duplicate generation_id detected: {generation_id}")
@@ -649,9 +678,10 @@ def main() -> None:
     if len(generation_ids) != manifest_row_count:
         raise ValueError("Duplicate generation_id detected during validation")
     for idx, row in enumerate(manifest_rows):
-        if row["generation_index"] != idx:
-            raise ValueError(f"Manifest row order mismatch at index {idx}")
-        if split_manifest_path and row.get("dataset_row_id") is not None and int(row["dataset_row_id"]) != idx:
+        expected_generation_index = slice_start + idx
+        if row["generation_index"] != expected_generation_index:
+            raise ValueError(f"Manifest row order mismatch at local index {idx}")
+        if split_manifest_path and row.get("dataset_row_id") is not None and int(row["dataset_row_id"]) != expected_generation_index:
             raise ValueError(f"dataset_row_id mismatch at manifest index {idx}")
         if row["seed"] != args.seed:
             raise ValueError(f"Seed mismatch in manifest at index {idx}")
@@ -680,6 +710,8 @@ def main() -> None:
         "generated_note_count": len(all_generated_notes),
         "manifest_row_count": manifest_row_count,
         "unique_generation_ids": len(generation_ids),
+        "start_index": slice_start,
+        "end_index": slice_end,
         "output_file": str(output_path),
         "manifest_output": str(manifest_path),
         "run_metadata_path": str(run_metadata_path),

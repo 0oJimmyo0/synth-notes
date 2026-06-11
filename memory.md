@@ -164,6 +164,42 @@ Interpretation:
 - only ~30% of dev/test rows are from patients never seen in training
 - this means future reporting should stratify by `patient_disjoint_from_train`
 
+Important technical correction discovered later:
+
+- the old leakage manifest matched the pre-filter split, not the actual filtered HF datasets used by ELM training/generation
+- split happens first in `prep_hf_dataset/post_emb_dataprep.py`
+- long-sequence filtering happens later in `open-elm/filter_long_sequences.py`
+- therefore `encoded_*_filtered` can drift from the original split manifest unless leakage audit is regenerated against the filtered datasets
+
+Current full vs filtered counts:
+
+- train: `265,434 -> 262,895` (`-2,539`)
+- dev: `33,179 -> 32,847` (`-332`)
+- test: `33,180 -> 32,843` (`-337`)
+
+This explains why manifest-enabled vanilla generation failed when it tried to join:
+
+- `encoded_testing_filtered` now has `32,843` rows
+- old `split_manifest_note_level.csv` still had `33,180` test rows
+
+New leakage-audit design:
+
+- keep a stable whole-cohort source manifest for all embedding rows and split assignments
+- regenerate a filtered-aligned split manifest that matches `encoded_training_filtered`, `encoded_dev_filtered`, and `encoded_testing_filtered`
+- use the filtered-aligned manifest as the canonical join target for vanilla generation and Phase 1 audit
+- keep generation manifests separate per run / condition; do not overwrite source provenance
+- refreshed script now aims to emit:
+  - `split_manifest_note_level.csv` for filtered-aligned downstream joins
+  - `split_manifest_note_level_full.csv` for whole-cohort provenance
+  - `split_manifest_removed_by_filter.csv` for dropped rows
+  - filtered and full overlap summaries
+
+Implication for future CAV/editor work:
+
+- source manifest should stay fixed
+- each generation run should write its own generation manifest keyed by `source_row_id` / `embedding_row_id`
+- CAV-specific fields (axis id, alpha, normalization flag) belong in the generation manifest, not the source manifest
+
 What this means for the manifest:
 
 - every generated row should carry:
@@ -275,3 +311,111 @@ Useful concise summary for future meetings:
 - current split is note- and admission-disjoint but not patient-disjoint
 - manifest-aware baseline generation code is ready
 - current old-format generation run should be rerun to produce the official Phase 1 JSONL manifest
+
+## Vanilla Audit Pipeline
+
+Phase 1 audit script added:
+
+- `embedding_elm/open-elm/audit_vanilla_generation.py`
+
+Purpose:
+
+- audit manifest-driven vanilla generation only
+- do not start CAV, LLM editor, or downstream NER here
+
+Inputs:
+
+- `--manifest_path`
+- `--dataset_path`
+- optional `--split_manifest_path`
+- `--output_dir`
+- optional `--embedding_model_name`
+- optional `--sample_size_for_manual_review`
+
+Main audit stages:
+
+1. manifest integrity checks
+2. basic quality audit
+3. faithfulness audit by re-embedding generated notes with BGE
+4. lightweight privacy / memorization screen
+5. concise PASS / CAUTION / FAIL summary
+
+Expected outputs:
+
+- `generation_audit_baseline.json`
+- `generation_audit_baseline.md`
+- `vanilla_quality_table.csv`
+- `vanilla_faithfulness_table.csv`
+- `patient_disjoint_vs_full_metrics.csv`
+- `manual_review_sample.csv`
+
+What the script checks:
+
+- row count alignment between manifest and `encoded_testing_filtered`
+- unique `generation_id`
+- required non-null generation/provenance fields where available
+- `split == test`
+- `generation_condition == vanilla`
+- leakage flags if split manifest is provided
+- decoding parameter consistency warnings
+- no accidental source-note text columns in the manifest
+
+What the script computes:
+
+- empty / too-short / repetition-collpase rates
+- empty / too-short / repetition-collapse rates
+- word / char count summaries
+- rough section-header sanity check
+- source-vs-generated embedding cosine
+- source self-retrieval top-1 / top-5 / top-10 recovery
+- leakage-stratified metrics for:
+  - full test
+  - patient-disjoint test
+  - patient-overlap test
+- exact duplicate generated notes
+- nearest-train embedding screen
+- exact duplicate vs train text if train text is accessible
+- simple PHI-like regex flags
+
+Validation status:
+
+- script compiled successfully with `python -m py_compile`
+
+Practical note:
+
+- this audit requires the manifest-enabled vanilla generation rerun
+- the currently running old-format job `1989100` does not produce the required JSONL manifest
+
+## Research Plan Update
+
+`research_plan.tex` was updated to reflect:
+
+- two-layer manifest architecture
+- filtered-aligned leakage manifest as canonical downstream artifact
+- current filtered cohort counts (`262,895 / 32,847 / 32,843`)
+- vanilla rerun blocked on refreshed filtered-aligned manifest
+
+## June 10 launcher changes
+
+Generation code:
+
+- `open-elm/generate_synthetic_notes.py` now supports shard slicing with:
+  - `--start_index`
+  - `--end_index`
+- shard runs preserve global `generation_index`, note numbering, and `dataset_row_id`
+
+Generation launcher:
+
+- `open-elm/generate_synthetic_notes.slurm` was rewritten to:
+  - request up to 48h wall time
+  - request 2 H100 GPUs by default
+  - use 8 CPUs / 96G RAM
+  - run 1 or 2 shard workers in parallel (`NUM_SHARDS`, default `2`)
+  - merge shard text outputs back into one ordered note file
+  - merge shard manifests back into one ordered JSONL manifest
+  - validate merged note count and manifest row count against dataset length
+
+Operational note:
+
+- a 2-GPU request alone would not speed generation unless the script itself shards work
+- the new launcher implements that sharded workflow explicitly
