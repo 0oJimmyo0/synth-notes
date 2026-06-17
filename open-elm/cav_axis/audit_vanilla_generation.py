@@ -60,6 +60,18 @@ def parse_args() -> argparse.Namespace:
         help="Sentence embedding model used for re-embedding generated notes",
     )
     parser.add_argument(
+        "--embedding_device",
+        default="auto",
+        choices=["auto", "cpu", "cuda"],
+        help="Device for generated-note re-embedding",
+    )
+    parser.add_argument(
+        "--embedding_batch_size",
+        type=int,
+        default=64,
+        help="Batch size for generated-note re-embedding",
+    )
+    parser.add_argument(
         "--sample_size_for_manual_review",
         type=int,
         default=50,
@@ -301,10 +313,33 @@ def integrity_checks(manifest_df: pd.DataFrame, dataset_len: int, split_manifest
     }
 
 
-def encode_generated_notes(model_name: str, texts: list[str]) -> np.ndarray:
-    model = SentenceTransformer(model_name)
-    embeddings = model.encode(texts, batch_size=64, show_progress_bar=True, convert_to_numpy=True, normalize_embeddings=True)
-    return embeddings
+def resolve_embedding_device(requested_device: str) -> str:
+    if requested_device != "auto":
+        return requested_device
+    try:
+        import torch
+
+        return "cuda" if torch.cuda.is_available() else "cpu"
+    except Exception:
+        return "cpu"
+
+
+def encode_generated_notes(
+    model_name: str,
+    texts: list[str],
+    requested_device: str,
+    batch_size: int,
+) -> tuple[np.ndarray, str]:
+    resolved_device = resolve_embedding_device(requested_device)
+    model = SentenceTransformer(model_name, device=resolved_device)
+    embeddings = model.encode(
+        texts,
+        batch_size=batch_size,
+        show_progress_bar=True,
+        convert_to_numpy=True,
+        normalize_embeddings=True,
+    )
+    return embeddings, resolved_device
 
 
 def extract_source_embeddings(dataset_path: Path) -> np.ndarray:
@@ -623,9 +658,11 @@ def main() -> None:
     quality_df = pd.concat([manifest_df.copy(), pd.DataFrame(quality_rows)], axis=1)
 
     source_embeddings = extract_source_embeddings(dataset_path)
-    generated_embeddings = encode_generated_notes(
+    generated_embeddings, resolved_embedding_device = encode_generated_notes(
         args.embedding_model_name,
         quality_df["generated_text"].fillna("").tolist(),
+        args.embedding_device,
+        args.embedding_batch_size,
     )
 
     source_cosine = np.sum(source_embeddings * generated_embeddings, axis=1)
@@ -738,6 +775,9 @@ def main() -> None:
         "split_manifest_path": str(Path(args.split_manifest_path).resolve()) if args.split_manifest_path else None,
         "output_dir": str(output_dir.resolve()),
         "embedding_model_name": args.embedding_model_name,
+        "embedding_device_requested": args.embedding_device,
+        "embedding_device_resolved": resolved_embedding_device,
+        "embedding_batch_size": args.embedding_batch_size,
         "sample_size_for_manual_review": args.sample_size_for_manual_review,
         "package_versions": package_versions(),
         "integrity": integrity,

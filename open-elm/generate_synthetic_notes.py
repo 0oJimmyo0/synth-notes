@@ -594,13 +594,14 @@ def main() -> None:
                 )
 
             for offset, note in enumerate(generated_notes):
+                local_index = batch_start + offset
                 generation_index = slice_start + batch_start + offset
                 generation_id = f"{run_id}-{generation_index:08d}"
                 if generation_id in generation_ids:
                     raise ValueError(f"Duplicate generation_id detected: {generation_id}")
                 generation_ids.add(generation_id)
 
-                source = source_records[generation_index]
+                source = source_records[local_index]
                 split_value = source.get("split") or args.split
                 row = {
                     "generation_id": generation_id,

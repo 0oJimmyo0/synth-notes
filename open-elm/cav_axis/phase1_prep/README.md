@@ -5,7 +5,7 @@ This folder contains pre-generation and pre-audit scaffolding for the vanilla ba
 Contents:
 
 - `run_audit_vanilla_generation.sh`
-  - exact command to run `audit_vanilla_generation.py` after the official vanilla manifest exists
+  - exact command to run `cav_axis/audit_vanilla_generation.py` after the official vanilla manifest exists
 - `manual_review_rubric_50.csv`
   - blank manual review sheet for 50 sampled generated notes
 - `*_template.csv`

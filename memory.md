@@ -132,6 +132,165 @@ Validation built into generator:
 - row order must match generation order
 - decoding params must match run config
 
+## Coverage Mapping Prep
+
+Phase 1 coverage mapping has now been upgraded from a guard-only stub to a full layered prep/evaluation script:
+
+- `embedding_elm/open-elm/cav_axis/prepare_coverage_mapping.py`
+
+Current design choices:
+
+- the primary quantitative analysis space is the full normalized 1024-d BGE embedding space
+- PCA / UMAP are visualization only and should not be used for scientific coverage claims
+- `real_only_precompute` remains available now for held-out test-only real-note manifold preparation
+- `real_all_filtered_precompute` now supports manifold discovery across the entire filtered real cohort (train/dev/test)
+- `real_vs_synthetic` is still guard-blocked unless:
+  - vanilla audit status is `PASS` or `CAUTION`
+  - synthetic manifest exists
+  - synthetic embeddings exist
+  - synthetic manifest row count matches synthetic embedding row count
+  - synthetic manifest row order and `dataset_row_id` exactly match filtered `encoded_testing_filtered`
+  - leakage flags are present
+
+What `real_vs_synthetic` now computes when guards pass:
+
+- real vs synthetic cluster occupancy over real-fitted clusters
+- low-density real-cluster coverage
+- nearest-real-neighbor distance summaries
+- real-to-synthetic coverage / recall style metrics
+- synthetic-to-real precision / on-manifoldness style metrics
+- synthetic density proxy
+- approximate MMD and energy distance on sampled embeddings
+- leakage-aware summaries for:
+  - full test
+  - patient-disjoint
+  - patient-overlap
+- subgroup summaries if metadata are available or joined in
+
+Main outputs now targeted:
+
+- `coverage_real_vs_synthetic.json`
+- `coverage_real_vs_synthetic.md`
+- `cluster_occupancy_real_vs_synthetic.csv`
+- `low_density_cluster_coverage.csv`
+- `nearest_real_distance_summary.csv`
+- `coverage_full_vs_patient_disjoint.csv`
+- optional `subgroup_coverage_summary.csv`
+- optional `coverage_umap_real_vs_synthetic.png`
+
+Important caveat:
+
+- current filtered-aligned split manifest still does not include age / insurance / LOS / ICU style subgroup metadata, so subgroup claims remain blocked unless an extra metadata table is joined with `--extra_metadata_path`
+
+Clarification:
+
+- `real_all_filtered_precompute` is for exploratory discovery and CAV-target planning across all filtered real embeddings
+- `real_only_precompute` plus `real_vs_synthetic` remain the official held-out evaluation path
+
+Launcher additions:
+
+- `embedding_elm/open-elm/cav_axis/coverage_real_all_filtered.slurm`
+  - whole-filtered-real manifold discovery across filtered train/dev/test
+- `embedding_elm/open-elm/cav_axis/coverage_real_vs_synthetic.slurm`
+  - held-out real-vs-synthetic coverage comparison after vanilla audit outputs exist
+
+Standalone synthetic re-embedding fix:
+
+- `embedding_elm/open-elm/cav_axis/reembed_generated_notes.py`
+- `embedding_elm/open-elm/cav_axis/reembed_generated_notes.slurm`
+
+Purpose:
+
+- generate `generated_note_embeddings_bge_large.npy` directly from the vanilla generation manifest
+- avoid rerunning the full audit when only the synthetic embedding matrix is missing
+- unblock `real_vs_synthetic` coverage mapping
+
+## Vanilla Audit Runtime Update
+
+The first manual run of:
+
+- `embedding_elm/open-elm/cav_axis/audit_vanilla_generation.py`
+
+showed that re-embedding generated notes on the login node was slow enough to warrant a GPU-backed Slurm path.
+
+Audit script improvements now in place:
+
+- added `--embedding_device {auto,cpu,cuda}`
+- added `--embedding_batch_size`
+- audit summary now records requested vs resolved embedding device and embedding batch size
+
+## Subgroup Metadata Build
+
+Subgroup metadata discovery and build are now in place for Phase 1 coverage interpretation.
+
+Source tables confirmed under MIMIC-IV:
+
+- `.../hosp/patients.csv`
+  - `subject_id`, `gender`, `anchor_age`, `anchor_year`
+- `.../hosp/admissions.csv`
+  - `subject_id`, `hadm_id`, `admittime`, `dischtime`, `admission_type`, `insurance`, `race`
+- `.../hosp/services.csv`
+  - `subject_id`, `hadm_id`, `transfertime`, `curr_service`
+- `.../icu/icustays.csv`
+  - `subject_id`, `hadm_id`, `stay_id`, `los`
+
+New builder script:
+
+- `embedding_elm/open-elm/cav_axis/build_subgroup_metadata.py`
+
+Outputs written to:
+
+- `/gpfs/radev/pi/xu_hua/shared/datasets/synthnote/mimiciv/3.1/data_note_hadm_all/clinic_notes/1_task/subgroup_metadata/subgroup_metadata_full.csv`
+- `/gpfs/radev/pi/xu_hua/shared/datasets/synthnote/mimiciv/3.1/data_note_hadm_all/clinic_notes/1_task/subgroup_metadata/subgroup_metadata_filtered.csv`
+- `/gpfs/radev/pi/xu_hua/shared/datasets/synthnote/mimiciv/3.1/data_note_hadm_all/clinic_notes/1_task/subgroup_metadata/subgroup_metadata_summary.json`
+
+Canonical subgroup fields now emitted for downstream coverage mapping:
+
+- `age_bin`
+- `sex_gender`
+- `race_ethnicity`
+- `insurance`
+- `admission_type`
+- `service`
+- `los_bin`
+- `icu_flag`
+
+Important fix:
+
+- the builder originally wrote `insurance_group`, `admission_type_group`, and `service_group` only
+- it now also writes canonical coverage-compatible fields `insurance`, `admission_type`, and `service`
+- this avoids silent empty subgroup summaries in `prepare_coverage_mapping.py`
+
+Current summary snapshot:
+
+- full rows: `331,793`
+- filtered rows: `328,585`
+- missingness is very low for all major subgroup fields
+- filtered cohort examples:
+  - age bins: mostly `40-64`, `65-79`, `80+`
+  - services dominated by `medicine` then `surgery`
+  - ICU flag true for about `64.7k` filtered rows
+
+Important interpretation decision:
+
+- candidate CAV target regions should be defined from the whole filtered real embedding manifold, not from vanilla synthetic gaps alone
+- vanilla held-out real-vs-synthetic coverage should be used as a validation/prioritization signal, not as the primary discovery space
+- practical next step: rerun `real_all_filtered_precompute` with `--extra_metadata_path subgroup_metadata_filtered.csv` so sparse/dense clusters can be interpreted by subgroup enrichment
+
+New launcher:
+
+- `embedding_elm/open-elm/cav_axis/audit_vanilla_generation.slurm`
+
+Intent:
+
+- run the BGE re-embedding step on GPU for the manifest-backed vanilla audit
+- avoid long login-node runs
+- keep output paths aligned with:
+  - `synthetic_notes_test_vanilla_seed42_manifest.jsonl`
+  - `encoded_testing_filtered`
+  - `split_manifest_note_level.csv`
+  - `generation_audit/vanilla_test_seed42`
+
 ## Leakage Audit
 
 Leakage audit script added:
@@ -316,7 +475,7 @@ Useful concise summary for future meetings:
 
 Phase 1 audit script added:
 
-- `embedding_elm/open-elm/audit_vanilla_generation.py`
+- `embedding_elm/open-elm/cav_axis/audit_vanilla_generation.py`
 
 Purpose:
 
@@ -424,7 +583,7 @@ Operational note:
 
 Prepared under:
 
-- `embedding_elm/open-elm/phase1_prep/`
+- `embedding_elm/open-elm/cav_axis/phase1_prep/`
 
 Files added:
 
@@ -441,6 +600,14 @@ Files added:
   - real held-out coverage prep only; blocked until synthetic notes are re-embedded and vanilla audit is PASS/CAUTION
 - `factors.csv`
   - candidate future CAV factor spec, not a fitted axis-bank input yet
+
+Additional Phase 1 prep script:
+
+- `open-elm/cav_axis/prepare_coverage_mapping.py`
+  - supports:
+    - `--mode real_only_precompute`
+    - `--mode real_vs_synthetic`
+  - `real_vs_synthetic` is guard-blocked unless vanilla manifest, vanilla audit, and synthetic embeddings all exist and agree
 
 ## Incomplete Vanilla Output Quick Read
 
@@ -460,3 +627,31 @@ Interpretation:
 
 - the model is producing free-text synthetic clinical notes in discharge-summary-like format
 - but the incomplete run is not an official baseline because it timed out and has no valid manifest
+
+## Coverage Prep Status
+
+Completed real-only precompute under:
+
+- `/gpfs/radev/pi/xu_hua/shared/datasets/synthnote/mimiciv/3.1/data_note_hadm_all/clinic_notes/1_task/coverage/real_only_precompute`
+
+Outputs created:
+
+- `real_cluster_assignments.csv`
+- `real_cluster_summary.csv`
+- `real_group_cluster_summary.csv`
+- `real_subgroup_cluster_summary.csv`
+- `coverage_real_only_precompute.json`
+- `coverage_real_only_precompute.md`
+
+Real-only precompute summary:
+
+- held-out real rows: `32,843`
+- clusters: `50`
+- row-count alignment: `true`
+- warning: subgroup metadata fields like age/insurance/LOS/ICU are not present yet in the filtered split manifest, so subgroup cluster summary is currently empty
+
+Current official vanilla job:
+
+- Slurm job `1996960`
+- state at last check: `PENDING`
+- submitted with refreshed filtered-aligned split manifest and 2-GPU sharded launcher

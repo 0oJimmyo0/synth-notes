@@ -33,7 +33,7 @@ An embedding-conditioned language model (ELM) can decode discharge summaries fro
 \end{quote}
 
 \textbf{Phase 1 milestone (first manuscript-ready block).}
-Vanilla ELM generation, a two-layer provenance system (whole-cohort source manifest + filtered-aligned generation manifest), leakage audit reporting, baseline faithfulness/quality audit, and initial internal coverage mapping.
+Vanilla ELM generation, a two-layer provenance system (whole-cohort source manifest + filtered-aligned generation manifest), leakage audit reporting, baseline faithfulness/quality audit, and a two-layer coverage framework: \textbf{whole-filtered-real manifold discovery} plus \textbf{held-out real-vs.-synthetic validation}.
 
 \textbf{Extensions (Phase 2/3, not required for Phase 1).}
 CAV axis bank and controlled steering; optional LLM editor; reference-guided external coverage analysis if available; downstream clinical entity extraction validation.
@@ -202,7 +202,9 @@ An \textbf{embedding-conditioned language model} decodes text from a fixed sourc
   \item Filtered ELM cohort used by the model: train 262,895; dev 32,847; test 32,843
   \item Rows removed by long-sequence filtering: 2,539 train; 332 dev; 337 test (3,208 total)
   \item ELM training complete: \texttt{checkpoint-8215} (Apr 2026)
-  \item Pre-filter leakage audit complete; filtered-aligned leakage manifest refresh required before official vanilla rerun
+  \item Pre-filter and filtered-aligned leakage audits complete
+  \item Canonical filtered-aligned split manifest now matches \texttt{encoded\_\*\_filtered} and is the official join target for generation and audit
+  \item Vanilla held-out rerun launched with the updated manifest, structured generation output, and longer multi-GPU Slurm configuration
 \end{itemize}
 
 \subsection{Manifest architecture}
@@ -215,6 +217,18 @@ Phase 1 now requires \textbf{two linked manifest layers}:
 
 Later generation conditions (multi-seed vanilla, random shift, CAV, optional editor) should \textbf{not} overwrite the source manifest. Instead, they should write new generation manifests referencing the same stable \texttt{source\_row\_id}/\texttt{embedding\_row\_id} plus condition-specific fields such as axis id, $\alpha$, normalization flag, or editor model.
 
+\subsection{Why the manifest is now a core Phase 1 requirement}
+
+The structured generation manifest is no longer a convenience artifact; it is the \textbf{minimal provenance layer} required to make vanilla generation scientifically usable. Without it, we cannot reliably:
+\begin{itemize}[nosep]
+  \item preserve exact row alignment between \texttt{encoded\_testing\_filtered}, source embeddings, generated notes, and leakage metadata,
+  \item stratify all results by \texttt{patient\_disjoint\_from\_train} vs.\ patient-overlap rows,
+  \item re-embed generated notes and compare them back to the correct source rows for faithfulness or coverage analysis,
+  \item carry the same source row identifiers forward into later generation conditions such as multi-seed vanilla, random shift, or CAV steering.
+\end{itemize}
+
+Operationally, the manifest turns a free-text generation run into a \textbf{reproducible row-level experiment}.
+
 %=============================================================================
 \section{Research questions}
 %=============================================================================
@@ -223,7 +237,7 @@ Later generation conditions (multi-seed vanilla, random shift, CAV, optional edi
 Does vanilla, source-conditioned ELM generation produce readable discharge summaries that preserve source-note semantics on held-out embeddings?
 
 \paragraph{RQ2 (Phase 1). Coverage baseline.}
-What regions of the real-note embedding manifold are under-covered by vanilla synthetic generation, including subgroup-stratified gaps?
+What regions of the \textbf{full filtered real-note manifold} are dense, sparse, or subgroup-skewed, and which of those regions are under-covered by vanilla synthetic generation on held-out evaluation?
 
 \paragraph{RQ3 (Phase 2). Audited enrichment.}
 Does metadata-linked CAV steering improve coverage and structured diversity beyond multi-seed vanilla decoding and norm-matched random perturbation, without unacceptable faithfulness loss or increased privacy risk?
@@ -257,11 +271,16 @@ All synthetic outputs will be evaluated under five reporting domains. Phase 1 im
 \subsection{Coverage}
 
 \begin{itemize}[nosep]
+  \item \textbf{Primary analysis space:} the full normalized 1024-d BGE embedding space,
+  \item \textbf{Discovery layer:} whole filtered real embeddings across train/dev/test to identify sparse/dense regions and candidate bias structure,
+  \item \textbf{Validation layer:} held-out real vs.\ vanilla synthetic comparison, with patient-disjoint sensitivity analysis,
   \item cluster occupancy over real-note embedding clusters,
   \item low-density region coverage,
   \item subgroup coverage by age, sex/gender, race/ethnicity, insurance, admission type, service, LOS,
   \item $k$NN precision/recall, MMD/energy distance, nearest-real-note distance.
 \end{itemize}
+
+PCA/UMAP/t-SNE plots may be used as \textbf{visualization only}. Scientific coverage claims should be based on high-dimensional distances, neighborhood structure, and cluster occupancy in the original embedding space.
 
 \subsection{Diversity}
 
@@ -303,7 +322,8 @@ Phase 1 establishes whether the core decoder is scientifically usable before any
   \item Structured generation manifest with row-level provenance,
   \item Leakage flags on every generated row, joined from the filtered-aligned split manifest,
   \item Baseline faithfulness and quality audit (cosine, retrieval, length/collapse, entity overlap sample),
-  \item Initial internal coverage map of real vs.\ vanilla synthetic embeddings.
+  \item Whole-filtered-real manifold discovery across filtered train/dev/test embeddings,
+  \item Held-out real-vs.\ vanilla synthetic coverage validation after vanilla audit passes.
 \end{enumerate}
 
 \subsection{Explicitly out of scope for Phase 1}
@@ -324,6 +344,9 @@ These are scientifically important but \textbf{not dependencies} for the first m
   \item \texttt{synthetic\_generation\_manifest\_baseline.jsonl} (or \texttt{.parquet})
   \item \texttt{split\_manifest\_note\_level\_full.csv} + \texttt{split\_manifest\_note\_level.csv}
   \item \texttt{generation\_audit\_baseline.json} and \texttt{generation\_audit\_baseline.md}
+  \item \texttt{coverage\_real\_all\_filtered\_precompute.json/.md} plus whole-filtered-real cluster summary tables
+  \item \texttt{coverage\_real\_only\_precompute.json/.md} plus held-out real cluster summary tables
+  \item \texttt{coverage\_real\_vs\_synthetic.json/.md} once vanilla audit passes and generated-note embeddings are available
   \item patient-disjoint and full held-out evaluation tables
 \end{itemize}
 
@@ -334,13 +357,14 @@ These are scientifically important but \textbf{not dependencies} for the first m
 \subsection{Phase 2: Coverage mapping and CAV enrichment}
 
 \begin{itemize}[nosep]
+  \item Use the whole-filtered-real manifold map to identify candidate sparse, dense, and subgroup-skewed regions,
   \item Build \texttt{factors.csv} and fit/audit axis bank on interpretable metadata axes (age, sex/gender, race/ethnicity, insurance, admission type, service, LOS bin, ICU flag),
   \item \textbf{Exclude disease-label axes} in the first version,
   \item Generate CAV-steered, multi-seed vanilla, and norm-matched random-shift controls,
   \item Compare faithfulness--coverage tradeoffs; select safe $\alpha$ values.
 \end{itemize}
 
-\textbf{CAV is not used as arbitrary noise.} Steering is accepted only if it improves pre-specified under-covered regions while passing faithfulness and privacy audits, and outperforms norm-matched random perturbation on interpretability and/or structured coverage.
+\textbf{CAV is not used as arbitrary noise.} Steering is accepted only if it targets pre-specified under-covered regions discovered in the whole-filtered-real manifold map, while passing faithfulness and privacy audits, and outperforms norm-matched random perturbation on interpretability and/or structured coverage.
 
 \subsection{Phase 2/3 optional: reference-guided coverage}
 
@@ -398,6 +422,24 @@ Coverage gains are off-manifold &
 \section{Meeting roadmap}
 %=============================================================================
 
+\subsection*{Suggested framing for this week's update}
+
+For the current weekly meeting, the clearest story is:
+\begin{enumerate}[nosep]
+  \item \textbf{Vanilla baseline first:} finish a clean, manifest-backed held-out generation run before any CAV/editor extension.
+  \item \textbf{Why the manifest matters:} it makes every synthetic note traceable to a filtered held-out source row, leakage flags, decoding config, and later re-embedding/audit outputs.
+  \item \textbf{Coverage mapping logic:} first map the \emph{whole filtered real manifold} to identify sparse/dense regions and candidate bias structure; then compare vanilla synthetic notes against the held-out baseline in the original 1024-d embedding space; then use uncovered regions to motivate Phase 2 enrichment targets.
+\end{enumerate}
+
+\subsection*{Current concrete questions to answer}
+
+\begin{itemize}[nosep]
+  \item Does vanilla ELM generation produce readable, source-faithful discharge summaries on the filtered held-out test cohort?
+  \item Does the structured manifest preserve exact alignment for leakage-aware and row-level downstream audits?
+  \item Which real-note regions across the \textbf{whole filtered cohort} are dense, sparse, or subgroup-skewed before any synthetic comparison?
+  \item After vanilla audit passes, which real clusters or patient-disjoint regions remain under-covered and therefore become candidates for later CAV targeting?
+\end{itemize}
+
 \begin{table}[h]
 \centering
 \small
@@ -410,10 +452,12 @@ Sentence embeddings ($\sim$332k) & \textbf{Done} & --- \\
 HF datasets + long-sequence filter & \textbf{Done} & --- \\
 ELM training (\texttt{checkpoint-8215}) & \textbf{Done} & --- \\
 Leakage audit & \textbf{Done} & Report in all evaluations \\
-Filtered-aligned leakage manifest refresh & \textbf{Immediate next} & Regenerate canonical split manifest against \texttt{encoded\_\*\_filtered} \\
-Vanilla held-out generation & \textbf{Blocked on manifest refresh} & Rerun with complete wall time + filtered-aligned manifest \\
-Structured manifest + vanilla audit & \textbf{Immediate after rerun} & Phase 1 deliverable \\
-Initial coverage mapping & Planned & After vanilla baseline \\
+Filtered-aligned leakage manifest refresh & \textbf{Done} & Use canonical \texttt{split\_manifest\_note\_level.csv} for all official joins \\
+Vanilla held-out generation & \textbf{In progress} & Wait for completion of manifest-backed rerun \\
+Structured manifest + vanilla audit & \textbf{Immediate next} & Run baseline audit once generation and re-embedding complete \\
+Whole-filtered-real coverage mapping & \textbf{In progress} & Use all filtered train/dev/test embeddings to identify sparse/dense regions and candidate bias structure \\
+Held-out real-only coverage baseline & \textbf{Done} & Preserve held-out baseline for later real-vs-synthetic validation \\
+Real-vs-synthetic coverage mapping & \textbf{Queued after audit} & Run only if vanilla audit is PASS or CAUTION and synthetic embeddings align \\
 CAV axis bank + steering & Phase 2 & After Phase 1 gate \\
 LLM editor / external reference / NER & Phase 3 & Extensions only \\
 \bottomrule
@@ -430,7 +474,8 @@ LLM editor / external reference / NER & Phase 3 & Extensions only \\
   \item median source$\rightarrow$synthetic cosine within a defensible band established by held-out real-note reference (pilot: $\sim$0.80),
   \item no major memorization red flags on duplicate/$n$-gram/PHI scans,
   \item primary tables reported on patient-disjoint subset and full held-out subset,
-  \item coverage map identifies candidate under-covered regions for Phase 2 CAV targeting.
+  \item whole-filtered-real coverage map identifies candidate under-covered regions for Phase 2 CAV targeting,
+  \item held-out real-vs.-synthetic coverage map shows whether vanilla under-covers those candidate regions.
 \end{itemize}
 
 %=============================================================================
@@ -469,13 +514,13 @@ Recommended \texttt{generation\_condition} values for later phases: \texttt{vani
 
 \subsection{Manuscript figures (target)}
 
-Pipeline diagram; leakage/overlap table; vanilla faithfulness table; coverage map; CAV tradeoff curve; privacy audit table; exemplar notes (real vs.\ vanilla vs.\ steered).
+Pipeline diagram; leakage/overlap table; vanilla faithfulness table; whole-filtered-real manifold map; held-out real-vs.\ vanilla coverage map; CAV tradeoff curve; privacy audit table; exemplar notes (real vs.\ vanilla vs.\ steered).
 
 %=============================================================================
 \section{Conclusion}
 %=============================================================================
 
-This project should be read as a \textbf{clinically grounded, leakage-aware validation framework} for source-conditioned synthetic discharge-summary generation. Phase 1 asks a disciplined question: can we generate and audit synthetic notes from held-out real embeddings with acceptable faithfulness, quality, and privacy-risk profile? Only if that gate is passed do we test whether audited CAV steering improves representational coverage beyond proper baselines, and later whether the resulting corpus has clinical NLP utility.
+This project should be read as a \textbf{clinically grounded, leakage-aware validation framework} for source-conditioned synthetic discharge-summary generation. Phase 1 asks a disciplined question: can we generate and audit synthetic notes from held-out real embeddings with acceptable faithfulness, quality, and privacy-risk profile, while also characterizing the full filtered real-note manifold that motivates later enrichment? Only if that gate is passed do we test whether audited CAV steering improves representational coverage beyond proper baselines, and later whether the resulting corpus has clinical NLP utility.
 
 \begin{thebibliography}{99}
 \bibitem{xu2021synthetic}

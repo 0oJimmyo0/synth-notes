@@ -27,6 +27,28 @@ to:
 
 - one embedding -> multiple controlled embedding variants -> multiple synthetic notes
 
+## Current Folder Organization
+
+This folder now contains both:
+
+- Phase 1 evaluation utilities for the vanilla baseline
+- Phase 2 CAV-axis construction and steering utilities
+
+Current layout:
+
+- `audit_vanilla_generation.py`
+- `audit_vanilla_generation.slurm`
+- `prepare_coverage_mapping.py`
+- `phase1_prep/`
+- `fit_axis_bank.py`
+- `audit_axis_bank.py`
+- `common.py`
+
+Interpretation:
+
+- `phase1_prep/`, `audit_vanilla_generation.py`, and `prepare_coverage_mapping.py` support the vanilla, manifest-backed, leakage-aware baseline evaluation
+- `fit_axis_bank.py` and `audit_axis_bank.py` support later CAV-axis fitting and auditing
+
 ## What We Had Before
 
 The older CAV experiments in the repo used one concept at a time, mainly age and gender:
