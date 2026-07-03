@@ -40,6 +40,12 @@ Current layout:
 - `audit_vanilla_generation.slurm`
 - `prepare_coverage_mapping.py`
 - `phase1_prep/`
+- `build_subgroup_metadata.py`
+- `build_cav_factor_table.py`
+- `build_shifted_embedding_dataset.py`
+- `rank_candidate_cav_clusters.py`
+- `fit_axis_bank.slurm`
+- `audit_axis_bank.slurm`
 - `fit_axis_bank.py`
 - `audit_axis_bank.py`
 - `common.py`
@@ -48,6 +54,8 @@ Interpretation:
 
 - `phase1_prep/`, `audit_vanilla_generation.py`, and `prepare_coverage_mapping.py` support the vanilla, manifest-backed, leakage-aware baseline evaluation
 - `fit_axis_bank.py` and `audit_axis_bank.py` support later CAV-axis fitting and auditing
+- `build_shifted_embedding_dataset.py` turns selected real source rows into a shifted HF dataset that can be fed directly into `generate_synthetic_notes.py`
+- Slurm launchers are intended to stay generic. Reuse them through env vars rather than creating one wrapper per cluster.
 
 ## What We Had Before
 
@@ -231,6 +239,16 @@ After this, inspect:
 - `heldout_target_metrics_full.csv`
 - `heldout_axis_count_curve.csv`
 
+Reusable Slurm path:
+
+```bash
+FACTORS_PATH=/path/to/factors.csv \
+FACTOR_COLS=age_bin,sex_gender,race_ethnicity,insurance,admission_type,service,los_bin,icu_flag,cluster_target_20 \
+CATEGORICAL_FACTORS=age_bin,sex_gender,race_ethnicity,insurance,admission_type,service,los_bin,icu_flag,cluster_target_20 \
+OUTPUT_DIR=/path/to/output_dir \
+sbatch cav_axis/fit_axis_bank.slurm
+```
+
 ### Step 3: Audit the axes
 
 Example:
@@ -252,6 +270,42 @@ Then inspect:
 - `steering_audit.csv`
 - `steering_trends.csv`
 - `steering_summary.json`
+
+Reusable Slurm path:
+
+```bash
+BANK_DIR=/path/to/output_dir \
+FACTORS_PATH=/path/to/factors.csv \
+AXIS_INDICES=15 \
+ALPHAS='-2,-1,-0.5,0.5,1,2' \
+TOP_TARGETS=20 \
+OUTPUT_NAME=steering_audit_custom.csv \
+sbatch cav_axis/audit_axis_bank.slurm
+```
+
+### Step 3a: Reuse the factor-table builder
+
+`build_cav_factor_table.py` is generic and should be reused for future cluster sets instead of adding cluster-specific scripts.
+
+Example:
+
+```bash
+python cav_axis/build_cav_factor_table.py \
+  --cluster_ids 20 \
+  --output_stem cav_factor_table_cluster20
+```
+
+### Step 3b: Reuse the enrichment ranking
+
+`rank_candidate_cav_clusters.py` is also generic.
+
+Example:
+
+```bash
+python cav_axis/rank_candidate_cav_clusters.py \
+  --cluster_ids 11,20,25 \
+  --output_stem candidate_cluster_enrichment_11_20_25
+```
 
 ### Step 4: Use the bank during ELM inference
 
@@ -315,9 +369,19 @@ So far the code is ready, but the real experiment still needs to be run on your 
 
 Not every dominant axis should automatically be used. Some may be too confounded, too weak, or too hard to interpret.
 
-### 5. Integrate axis steering into synthetic-note generation
+### 5. Run the first shifted-generation pilot cleanly
 
-We still need to connect `axis_bank.npz` directly to the clinic-note generation script so that shifted embeddings can be generated automatically during ELM inference.
+The missing plumbing is now in place:
+
+- `build_shifted_embedding_dataset.py` creates a row-aligned shifted HF dataset with steering provenance
+- `generate_synthetic_notes.py` can read that dataset metadata and write it into the normal generation manifest
+- `generate_synthetic_notes.slurm` now supports runs with or without an external split manifest
+
+So the next task is no longer infrastructure. It is policy and experimentation:
+
+- choose which source rows to steer
+- choose which axis / alpha settings to trust
+- decide how many shifted variants to generate per source note
 
 ### 6. Decide the generation policy
 

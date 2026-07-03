@@ -33,8 +33,14 @@ conda activate elm
 cd "${SCRIPT_DIR}"
 
 MANIFEST_PATH="${MANIFEST_PATH:-/gpfs/radev/pi/xu_hua/shared/datasets/synthnote/mimiciv/3.1/data_note_hadm_all/clinic_notes/1_task/synthetic_notes/synthetic_notes_test_vanilla_seed42_manifest.jsonl}"
-OUTPUT_PATH="${OUTPUT_PATH:-/gpfs/radev/pi/xu_hua/shared/datasets/synthnote/mimiciv/3.1/data_note_hadm_all/clinic_notes/1_task/generation_audit/vanilla_test_seed42/generated_note_embeddings_bge_large.npy}"
-METADATA_OUTPUT_PATH="${METADATA_OUTPUT_PATH:-/gpfs/radev/pi/xu_hua/shared/datasets/synthnote/mimiciv/3.1/data_note_hadm_all/clinic_notes/1_task/generation_audit/vanilla_test_seed42/generated_note_embeddings_bge_large.npy.meta.json}"
+OUTPUT_DIR="${OUTPUT_DIR:-}"
+if [ -n "${OUTPUT_DIR}" ]; then
+  OUTPUT_PATH="${OUTPUT_PATH:-${OUTPUT_DIR}/generated_note_embeddings_bge_large.npy}"
+  METADATA_OUTPUT_PATH="${METADATA_OUTPUT_PATH:-${OUTPUT_DIR}/generated_note_embeddings_bge_large.npy.meta.json}"
+else
+  OUTPUT_PATH="${OUTPUT_PATH:-/gpfs/radev/pi/xu_hua/shared/datasets/synthnote/mimiciv/3.1/data_note_hadm_all/clinic_notes/1_task/generation_audit/vanilla_test_seed42/generated_note_embeddings_bge_large.npy}"
+  METADATA_OUTPUT_PATH="${METADATA_OUTPUT_PATH:-/gpfs/radev/pi/xu_hua/shared/datasets/synthnote/mimiciv/3.1/data_note_hadm_all/clinic_notes/1_task/generation_audit/vanilla_test_seed42/generated_note_embeddings_bge_large.npy.meta.json}"
+fi
 EMBEDDING_MODEL_NAME="${EMBEDDING_MODEL_NAME:-BAAI/bge-large-en-v1.5}"
 EMBEDDING_DEVICE="${EMBEDDING_DEVICE:-cuda}"
 EMBEDDING_BATCH_SIZE="${EMBEDDING_BATCH_SIZE:-256}"

@@ -33,9 +33,19 @@ def parse_float_list(value: str) -> List[float]:
     return [float(item.strip()) for item in value.split(",") if item.strip()]
 
 
+def _json_default(value):
+    if isinstance(value, (np.integer,)):
+        return int(value)
+    if isinstance(value, (np.floating,)):
+        return float(value)
+    if isinstance(value, (np.bool_,)):
+        return bool(value)
+    raise TypeError(f"Object of type {value.__class__.__name__} is not JSON serializable")
+
+
 def save_json(path: str | Path, payload: Dict) -> None:
     with open(path, "w", encoding="utf-8") as handle:
-        json.dump(payload, handle, indent=2, sort_keys=True)
+        json.dump(payload, handle, indent=2, sort_keys=True, default=_json_default)
 
 
 def _normalize_join_cols(df: pd.DataFrame, join_cols: Sequence[str]) -> pd.DataFrame:
@@ -78,7 +88,21 @@ def load_and_merge_tables(
             "deduplicate it before fitting the axis bank."
         )
 
-    merged_df = metadata_df.merge(factors_df, on=list(join_cols), how="left", validate="many_to_one")
+    merged_df = metadata_df.merge(
+        factors_df,
+        on=list(join_cols),
+        how="left",
+        validate="many_to_one",
+        suffixes=("_meta", "_factor"),
+    )
+
+    # Preserve the metadata-defined row identity even if the factor table also carries it.
+    if "embedding_row_id" not in merged_df.columns:
+        if "embedding_row_id_meta" in merged_df.columns:
+            merged_df["embedding_row_id"] = merged_df["embedding_row_id_meta"]
+        elif "embedding_row_id_factor" in merged_df.columns:
+            merged_df["embedding_row_id"] = merged_df["embedding_row_id_factor"]
+
     return embeddings.astype(np.float64), merged_df
 
 

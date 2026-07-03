@@ -39,6 +39,8 @@ SYNTHETIC_EMBEDDINGS_PATH="${SYNTHETIC_EMBEDDINGS_PATH:-/gpfs/radev/pi/xu_hua/sh
 AUDIT_JSON_PATH="${AUDIT_JSON_PATH:-/gpfs/radev/pi/xu_hua/shared/datasets/synthnote/mimiciv/3.1/data_note_hadm_all/clinic_notes/1_task/generation_audit/vanilla_test_seed42/generation_audit_baseline.json}"
 OUTPUT_DIR="${OUTPUT_DIR:-/gpfs/radev/pi/xu_hua/shared/datasets/synthnote/mimiciv/3.1/data_note_hadm_all/clinic_notes/1_task/coverage/real_vs_synthetic_vanilla_seed42}"
 EXTRA_METADATA_PATH="${EXTRA_METADATA_PATH:-}"
+EXPECTED_GENERATION_CONDITION="${EXPECTED_GENERATION_CONDITION:-vanilla}"
+ALLOW_SUBSET_SYNTHETIC_MANIFEST="${ALLOW_SUBSET_SYNTHETIC_MANIFEST:-0}"
 N_CLUSTERS="${N_CLUSTERS:-50}"
 RANDOM_SEED="${RANDOM_SEED:-42}"
 PRDC_K="${PRDC_K:-5}"
@@ -58,6 +60,8 @@ echo "Synthetic embeddings: ${SYNTHETIC_EMBEDDINGS_PATH}"
 echo "Audit JSON: ${AUDIT_JSON_PATH}"
 echo "Output dir: ${OUTPUT_DIR}"
 echo "Extra metadata: ${EXTRA_METADATA_PATH:-<none>}"
+echo "Expected generation condition: ${EXPECTED_GENERATION_CONDITION}"
+echo "Allow subset synthetic manifest: ${ALLOW_SUBSET_SYNTHETIC_MANIFEST}"
 echo "n_clusters: ${N_CLUSTERS}"
 echo "random_seed: ${RANDOM_SEED}"
 echo "prdc_k: ${PRDC_K}"
@@ -75,6 +79,7 @@ CMD=(
   --synthetic_manifest_path "${SYNTHETIC_MANIFEST_PATH}"
   --synthetic_embeddings_path "${SYNTHETIC_EMBEDDINGS_PATH}"
   --audit_json_path "${AUDIT_JSON_PATH}"
+  --expected_generation_condition "${EXPECTED_GENERATION_CONDITION}"
   --output_dir "${OUTPUT_DIR}"
   --n_clusters "${N_CLUSTERS}"
   --random_seed "${RANDOM_SEED}"
@@ -86,6 +91,9 @@ CMD=(
 
 if [ -n "${EXTRA_METADATA_PATH}" ]; then
   CMD+=(--extra_metadata_path "${EXTRA_METADATA_PATH}")
+fi
+if [ "${ALLOW_SUBSET_SYNTHETIC_MANIFEST}" = "1" ]; then
+  CMD+=(--allow_subset_synthetic_manifest)
 fi
 
 "${CMD[@]}"

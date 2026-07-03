@@ -1,0 +1,213 @@
+{
+  "alphas": [
+    -2.0,
+    -1.0,
+    -0.5,
+    0.5,
+    1.0,
+    2.0
+  ],
+  "axis_summaries": [
+    {
+      "axis": 0,
+      "negative_targets": [
+        {
+          "factor": "cluster_target_11",
+          "level": 0,
+          "loading": -9.777436856649082,
+          "target_column": "cluster_target_11::0"
+        },
+        {
+          "factor": "cluster_target_20",
+          "level": 1,
+          "loading": -2.304029536308197,
+          "target_column": "cluster_target_20::1"
+        },
+        {
+          "factor": "cluster_target_25",
+          "level": 1,
+          "loading": -0.915072901675748,
+          "target_column": "cluster_target_25::1"
+        },
+        {
+          "factor": "cluster_target_25",
+          "level": 0,
+          "loading": 0.915072901675747,
+          "target_column": "cluster_target_25::0"
+        },
+        {
+          "factor": "cluster_target_20",
+          "level": 0,
+          "loading": 2.3040295363081977,
+          "target_column": "cluster_target_20::0"
+        }
+      ],
+      "positive_targets": [
+        {
+          "factor": "cluster_target_11",
+          "level": 1,
+          "loading": 9.777436856649082,
+          "target_column": "cluster_target_11::1"
+        },
+        {
+          "factor": "cluster_target_20",
+          "level": 0,
+          "loading": 2.3040295363081977,
+          "target_column": "cluster_target_20::0"
+        },
+        {
+          "factor": "cluster_target_25",
+          "level": 0,
+          "loading": 0.915072901675747,
+          "target_column": "cluster_target_25::0"
+        },
+        {
+          "factor": "cluster_target_25",
+          "level": 1,
+          "loading": -0.915072901675748,
+          "target_column": "cluster_target_25::1"
+        },
+        {
+          "factor": "cluster_target_20",
+          "level": 1,
+          "loading": -2.304029536308197,
+          "target_column": "cluster_target_20::1"
+        }
+      ]
+    },
+    {
+      "axis": 1,
+      "negative_targets": [
+        {
+          "factor": "cluster_target_25",
+          "level": 1,
+          "loading": -9.146033912379135,
+          "target_column": "cluster_target_25::1"
+        },
+        {
+          "factor": "cluster_target_20",
+          "level": 0,
+          "loading": -0.7640683557368189,
+          "target_column": "cluster_target_20::0"
+        },
+        {
+          "factor": "cluster_target_11",
+          "level": 1,
+          "loading": -0.6759288583035106,
+          "target_column": "cluster_target_11::1"
+        },
+        {
+          "factor": "cluster_target_11",
+          "level": 0,
+          "loading": 0.6759288583035121,
+          "target_column": "cluster_target_11::0"
+        },
+        {
+          "factor": "cluster_target_20",
+          "level": 1,
+          "loading": 0.7640683557368185,
+          "target_column": "cluster_target_20::1"
+        }
+      ],
+      "positive_targets": [
+        {
+          "factor": "cluster_target_25",
+          "level": 0,
+          "loading": 9.14603391237914,
+          "target_column": "cluster_target_25::0"
+        },
+        {
+          "factor": "cluster_target_20",
+          "level": 1,
+          "loading": 0.7640683557368185,
+          "target_column": "cluster_target_20::1"
+        },
+        {
+          "factor": "cluster_target_11",
+          "level": 0,
+          "loading": 0.6759288583035121,
+          "target_column": "cluster_target_11::0"
+        },
+        {
+          "factor": "cluster_target_11",
+          "level": 1,
+          "loading": -0.6759288583035106,
+          "target_column": "cluster_target_11::1"
+        },
+        {
+          "factor": "cluster_target_20",
+          "level": 0,
+          "loading": -0.7640683557368189,
+          "target_column": "cluster_target_20::0"
+        }
+      ]
+    },
+    {
+      "axis": 2,
+      "negative_targets": [
+        {
+          "factor": "cluster_target_20",
+          "level": 0,
+          "loading": -5.9103099600598625,
+          "target_column": "cluster_target_20::0"
+        },
+        {
+          "factor": "cluster_target_11",
+          "level": 0,
+          "loading": -1.4290763360867522,
+          "target_column": "cluster_target_11::0"
+        },
+        {
+          "factor": "cluster_target_25",
+          "level": 0,
+          "loading": -0.38813838990837113,
+          "target_column": "cluster_target_25::0"
+        },
+        {
+          "factor": "cluster_target_25",
+          "level": 1,
+          "loading": 0.3881383899083728,
+          "target_column": "cluster_target_25::1"
+        },
+        {
+          "factor": "cluster_target_11",
+          "level": 1,
+          "loading": 1.4290763360867547,
+          "target_column": "cluster_target_11::1"
+        }
+      ],
+      "positive_targets": [
+        {
+          "factor": "cluster_target_20",
+          "level": 1,
+          "loading": 5.91030996005986,
+          "target_column": "cluster_target_20::1"
+        },
+        {
+          "factor": "cluster_target_11",
+          "level": 1,
+          "loading": 1.4290763360867547,
+          "target_column": "cluster_target_11::1"
+        },
+        {
+          "factor": "cluster_target_25",
+          "level": 1,
+          "loading": 0.3881383899083728,
+          "target_column": "cluster_target_25::1"
+        },
+        {
+          "factor": "cluster_target_25",
+          "level": 0,
+          "loading": -0.38813838990837113,
+          "target_column": "cluster_target_25::0"
+        },
+        {
+          "factor": "cluster_target_11",
+          "level": 0,
+          "loading": -1.4290763360867522,
+          "target_column": "cluster_target_11::0"
+        }
+      ]
+    }
+  ]
+}

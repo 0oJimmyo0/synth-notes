@@ -63,6 +63,12 @@ def main() -> None:
     join_cols = parse_csv_list(args.join_cols)
     alpha_values = parse_float_list(args.alphas)
 
+    for col in join_cols:
+        if col in split_manifest.columns:
+            split_manifest[col] = split_manifest[col].astype(str).str.strip()
+    if "embedding_row_id" in split_manifest.columns:
+        split_manifest["embedding_row_id"] = pd.to_numeric(split_manifest["embedding_row_id"], errors="raise").astype(int)
+
     embeddings, merged_df = load_and_merge_tables(
         embeddings_path=args.embeddings_path,
         metadata_path=args.metadata_path,
@@ -70,7 +76,23 @@ def main() -> None:
         join_cols=join_cols,
     )
 
-    merged_df = merged_df.merge(split_manifest, on=["embedding_row_id", *join_cols], how="inner", validate="one_to_one")
+    if "embedding_row_id" in merged_df.columns:
+        merged_df["embedding_row_id"] = pd.to_numeric(merged_df["embedding_row_id"], errors="raise").astype(int)
+
+    merged_df = merged_df.merge(
+        split_manifest,
+        on=["embedding_row_id", *join_cols],
+        how="inner",
+        validate="one_to_one",
+        suffixes=("_factor", "_bank"),
+    )
+    if "split" not in merged_df.columns:
+        split_candidates = [col for col in ["split_bank", "split_factor"] if col in merged_df.columns]
+        if split_candidates:
+            merged_df["split"] = merged_df[split_candidates[0]]
+            for extra in split_candidates[1:]:
+                merged_df["split"] = merged_df["split"].where(merged_df["split"].notna(), merged_df[extra])
+
     heldout_rows = merged_df.loc[merged_df["split"] == "test", "embedding_row_id"].to_numpy(dtype=int)
     x_test = embeddings[heldout_rows]
 

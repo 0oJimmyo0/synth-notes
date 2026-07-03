@@ -9,7 +9,7 @@ Mode 1b: real_all_filtered_precompute
   - runs on the full filtered real cohort across train/dev/test
 
 Mode 2: real_vs_synthetic
-  - guarded until vanilla generation, audit, leakage flags, and synthetic embeddings exist
+  - guarded until generation audit, leakage flags, and synthetic embeddings exist
   - computes coverage in the full normalized 1024-d BGE embedding space
 
 Quantitative claims in this script are based on the full high-dimensional space.
@@ -132,6 +132,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--audit_json_path",
         default=DEFAULT_AUDIT_JSON_PATH,
+    )
+    parser.add_argument(
+        "--expected_generation_condition",
+        default="vanilla",
+        help="Expected synthetic manifest generation_condition. Use empty string to disable the check.",
+    )
+    parser.add_argument(
+        "--allow_subset_synthetic_manifest",
+        action="store_true",
+        help="Allow synthetic manifests that are a subset of the real held-out test rows.",
     )
     return parser.parse_args()
 
@@ -922,7 +932,7 @@ def check_real_vs_synthetic_guards(
     if not synthetic_manifest_path.exists():
         errors.append("Synthetic manifest does not exist.")
     if not audit_json_path.exists():
-        errors.append("Vanilla audit JSON does not exist.")
+        errors.append("Generation audit JSON does not exist.")
     if not synthetic_embeddings_path.exists():
         errors.append("Synthetic embedding file does not exist.")
 
@@ -931,7 +941,7 @@ def check_real_vs_synthetic_guards(
         audit_status = audit_data.get("readiness_status")
         guard_info["audit_status"] = audit_status
         if audit_status not in {"PASS", "CAUTION"}:
-            errors.append(f"Vanilla audit status must be PASS or CAUTION, got {audit_status}.")
+            errors.append(f"Generation audit status must be PASS or CAUTION, got {audit_status}.")
 
     if synthetic_manifest_path.exists():
         synthetic_manifest_df = load_jsonl(synthetic_manifest_path)
@@ -946,11 +956,14 @@ def check_real_vs_synthetic_guards(
             guard_info["synthetic_manifest_split_values"] = split_values
             if split_values != ["test"]:
                 errors.append(f"Synthetic manifest split values must be ['test'], got {split_values}.")
-        if "generation_condition" in synthetic_manifest_df.columns:
+        expected_generation_condition = args.expected_generation_condition or None
+        if expected_generation_condition and "generation_condition" in synthetic_manifest_df.columns:
             conditions = sorted(set(synthetic_manifest_df["generation_condition"].dropna().astype(str)))
             guard_info["synthetic_generation_conditions"] = conditions
-            if conditions != ["vanilla"]:
-                errors.append(f"Synthetic manifest generation_condition must be ['vanilla'], got {conditions}.")
+            if conditions != [expected_generation_condition]:
+                errors.append(
+                    f"Synthetic manifest generation_condition must be ['{expected_generation_condition}'], got {conditions}."
+                )
         if "dataset_row_id" in synthetic_manifest_df.columns and len(synthetic_manifest_df) == len(real_manifest):
             syn_ids = pd.to_numeric(synthetic_manifest_df["dataset_row_id"], errors="coerce")
             if syn_ids.isna().any():
@@ -962,6 +975,17 @@ def check_real_vs_synthetic_guards(
                 )
                 if not guard_info["synthetic_dataset_row_id_aligned"]:
                     errors.append("Synthetic manifest dataset_row_id order does not exactly match filtered test manifest.")
+        elif "dataset_row_id" in synthetic_manifest_df.columns and args.allow_subset_synthetic_manifest:
+            syn_ids = pd.to_numeric(synthetic_manifest_df["dataset_row_id"], errors="coerce")
+            if syn_ids.isna().any():
+                errors.append("Synthetic manifest contains non-numeric dataset_row_id values.")
+            else:
+                syn_ids = syn_ids.astype(int).to_numpy()
+                real_ids = set(real_manifest["dataset_row_id"].astype(int).tolist())
+                guard_info["synthetic_subset_row_id_count"] = int(len(syn_ids))
+                guard_info["synthetic_subset_unique_row_ids"] = int(len(set(syn_ids.tolist())))
+                if not set(syn_ids.tolist()).issubset(real_ids):
+                    errors.append("Synthetic subset manifest contains dataset_row_id values outside the filtered test manifest.")
 
     if synthetic_embeddings_path.exists():
         synthetic_embeddings = load_synthetic_embeddings(synthetic_embeddings_path)
@@ -972,7 +996,7 @@ def check_real_vs_synthetic_guards(
             errors.append(
                 f"Synthetic embedding row count ({synthetic_embeddings.shape[0]}) does not match synthetic manifest row count ({len(synthetic_manifest_df)})."
             )
-        if len(synthetic_manifest_df) != len(real_manifest):
+        if len(synthetic_manifest_df) != len(real_manifest) and not args.allow_subset_synthetic_manifest:
             errors.append(
                 f"Synthetic manifest row count ({len(synthetic_manifest_df)}) does not match real held-out row count ({len(real_manifest)})."
             )

@@ -1,13 +1,9 @@
 #!/usr/bin/env python3
 """
-Phase 1 audit pipeline for manifest-driven vanilla ELM generation.
+Phase 1 audit pipeline for manifest-driven ELM generation.
 
-This script is intentionally limited to vanilla generation auditing:
-- manifest integrity checks
-- basic quality checks
-- faithfulness checks via re-embedding
-- leakage-stratified summaries
-- lightweight privacy / memorization screens
+Defaults remain vanilla-oriented, but subset / shifted manifests can be audited
+when explicitly configured.
 """
 
 from __future__ import annotations
@@ -45,13 +41,23 @@ except Exception:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Audit manifest-driven vanilla generation outputs.")
-    parser.add_argument("--manifest_path", required=True, help="Path to the vanilla generation JSONL manifest")
-    parser.add_argument("--dataset_path", required=True, help="Path to encoded_testing_filtered")
+    parser = argparse.ArgumentParser(description="Audit manifest-driven generation outputs.")
+    parser.add_argument("--manifest_path", required=True, help="Path to the generation JSONL manifest")
+    parser.add_argument("--dataset_path", required=True, help="Path to the source encoded dataset")
+    parser.add_argument(
+        "--training_dataset_path",
+        default=None,
+        help="Optional explicit path to encoded_training_filtered for privacy nearest-neighbor checks",
+    )
     parser.add_argument(
         "--split_manifest_path",
         default=None,
         help="Path to split_manifest_note_level.csv from leakage audit",
+    )
+    parser.add_argument(
+        "--pickle_dir",
+        default=None,
+        help="Optional explicit path to pickle_ds_note_hadm_all for train text screening",
     )
     parser.add_argument("--output_dir", required=True, help="Directory for audit outputs")
     parser.add_argument(
@@ -72,10 +78,37 @@ def parse_args() -> argparse.Namespace:
         help="Batch size for generated-note re-embedding",
     )
     parser.add_argument(
+        "--precomputed_generated_embeddings_path",
+        default=None,
+        help="Optional .npy path for already re-embedded generated notes in manifest row order",
+    )
+    parser.add_argument(
         "--sample_size_for_manual_review",
         type=int,
         default=50,
         help="Number of generated notes to sample for manual review",
+    )
+    parser.add_argument(
+        "--expected_generation_condition",
+        default="vanilla",
+        help="Expected manifest generation_condition. Use empty string to disable the check.",
+    )
+    parser.add_argument(
+        "--allow_subset_dataset_rows",
+        action="store_true",
+        help="Allow the manifest to be a strict subset of dataset rows, keyed by dataset_row_id.",
+    )
+    parser.add_argument(
+        "--start_index",
+        type=int,
+        default=None,
+        help="Optional inclusive manifest row start for shard-local auditing.",
+    )
+    parser.add_argument(
+        "--end_index",
+        type=int,
+        default=None,
+        help="Optional exclusive manifest row end for shard-local auditing.",
     )
     return parser.parse_args()
 
@@ -226,12 +259,22 @@ def load_split_manifest(path: Path) -> pd.DataFrame:
     return df
 
 
-def integrity_checks(manifest_df: pd.DataFrame, dataset_len: int, split_manifest_df: pd.DataFrame | None) -> dict[str, Any]:
+def integrity_checks(
+    manifest_df: pd.DataFrame,
+    dataset_len: int,
+    split_manifest_df: pd.DataFrame | None,
+    expected_generation_condition: str | None,
+    allow_subset_dataset_rows: bool,
+) -> dict[str, Any]:
     issues: list[str] = []
     warnings: list[str] = []
 
     if len(manifest_df) != dataset_len:
-        issues.append(f"Manifest row count {len(manifest_df)} does not match dataset row count {dataset_len}.")
+        message = f"Manifest row count {len(manifest_df)} does not match dataset row count {dataset_len}."
+        if allow_subset_dataset_rows and len(manifest_df) < dataset_len:
+            warnings.append(message)
+        else:
+            issues.append(message)
 
     if manifest_df["generation_id"].duplicated().any():
         issues.append("Duplicate generation_id values detected.")
@@ -247,8 +290,13 @@ def integrity_checks(manifest_df: pd.DataFrame, dataset_len: int, split_manifest
     if "split" in manifest_df.columns and not (manifest_df["split"] == "test").all():
         issues.append("Manifest contains rows where split != test.")
 
-    if "generation_condition" in manifest_df.columns and not (manifest_df["generation_condition"] == "vanilla").all():
-        issues.append("Manifest contains rows where generation_condition != vanilla.")
+    if expected_generation_condition:
+        if "generation_condition" in manifest_df.columns and not (
+            manifest_df["generation_condition"] == expected_generation_condition
+        ).all():
+            issues.append(
+                f"Manifest contains rows where generation_condition != {expected_generation_condition}."
+            )
 
     leakage_cols = [
         "patient_disjoint_from_train",
@@ -281,26 +329,57 @@ def integrity_checks(manifest_df: pd.DataFrame, dataset_len: int, split_manifest
                 warnings.append(f"Manifest has multiple values for {col}: {unique_vals}")
 
     if "dataset_row_id" in manifest_df.columns:
-        expected = list(range(len(manifest_df)))
         actual = manifest_df["dataset_row_id"].astype(int).tolist()
-        if actual != expected:
-            issues.append("dataset_row_id order does not match manifest row order.")
+        if allow_subset_dataset_rows:
+            if actual != sorted(actual):
+                issues.append("dataset_row_id order is not monotonically increasing for subset manifest.")
+            if len(set(actual)) != len(actual):
+                warnings.append(
+                    "dataset_row_id contains duplicate values, which is allowed for multi-generation subset manifests."
+                )
+        else:
+            expected = list(range(len(manifest_df)))
+            if actual != expected:
+                issues.append("dataset_row_id order does not match manifest row order.")
 
     if split_manifest_df is not None:
         split_subset = split_manifest_df.loc[split_manifest_df["split"] == "test"].copy()
         split_subset = split_subset.sort_values("dataset_row_id").reset_index(drop=True)
-        if len(split_subset) != len(manifest_df):
-            warnings.append(
-                f"Split manifest test subset has {len(split_subset)} rows, manifest has {len(manifest_df)} rows."
-            )
-        else:
+        if allow_subset_dataset_rows and "dataset_row_id" in manifest_df.columns:
             compare_cols = [col for col in leakage_cols if col in manifest_df.columns and col in split_subset.columns]
+            merge_df = manifest_df[["dataset_row_id", *compare_cols]].copy()
+            merge_df = merge_df.drop_duplicates(subset=["dataset_row_id"])
+            split_subset = split_subset[["dataset_row_id", *compare_cols]].copy()
+            merged = merge_df.merge(
+                split_subset,
+                on="dataset_row_id",
+                how="left",
+                suffixes=("", "_expected"),
+                validate="one_to_one",
+            )
+            if len(merged) != len(merge_df) or merged["dataset_row_id"].isna().any():
+                issues.append("Subset manifest dataset_row_id values could not all be found in split manifest.")
             for col in compare_cols:
-                left = ensure_bool_series(manifest_df[col]).reset_index(drop=True)
-                right = ensure_bool_series(split_subset[col]).reset_index(drop=True)
-                mismatch = (left != right).fillna(False)
+                expected_col = f"{col}_expected"
+                mismatch = (
+                    ensure_bool_series(merged[col]).reset_index(drop=True)
+                    != ensure_bool_series(merged[expected_col]).reset_index(drop=True)
+                ).fillna(False)
                 if mismatch.any():
                     issues.append(f"Leakage flag mismatch for column {col} against split manifest.")
+        else:
+            if len(split_subset) != len(manifest_df):
+                warnings.append(
+                    f"Split manifest test subset has {len(split_subset)} rows, manifest has {len(manifest_df)} rows."
+                )
+            else:
+                compare_cols = [col for col in leakage_cols if col in manifest_df.columns and col in split_subset.columns]
+                for col in compare_cols:
+                    left = ensure_bool_series(manifest_df[col]).reset_index(drop=True)
+                    right = ensure_bool_series(split_subset[col]).reset_index(drop=True)
+                    mismatch = (left != right).fillna(False)
+                    if mismatch.any():
+                        issues.append(f"Leakage flag mismatch for column {col} against split manifest.")
 
     status = "PASS" if not issues else "FAIL"
     return {
@@ -342,6 +421,29 @@ def encode_generated_notes(
     return embeddings, resolved_device
 
 
+def load_precomputed_generated_embeddings(
+    path: Path,
+    expected_rows: int,
+    start_index: int | None = None,
+    end_index: int | None = None,
+) -> np.ndarray:
+    embeddings = np.load(path, mmap_mode="r")
+    if embeddings.ndim != 2:
+        raise ValueError(f"Expected 2D embedding matrix at {path}, got shape {embeddings.shape}")
+    if start_index is not None or end_index is not None:
+        start = 0 if start_index is None else int(start_index)
+        stop = embeddings.shape[0] if end_index is None else int(end_index)
+        embeddings = embeddings[start:stop]
+    if embeddings.shape[0] != expected_rows:
+        raise ValueError(
+            f"Precomputed generated embeddings row count {embeddings.shape[0]} does not match manifest row count {expected_rows}"
+        )
+    embeddings = embeddings.astype(np.float32, copy=False)
+    norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
+    norms = np.clip(norms, 1e-12, None)
+    return embeddings / norms
+
+
 def extract_source_embeddings(dataset_path: Path) -> np.ndarray:
     dataset = Dataset.load_from_disk(str(dataset_path))
     rows = []
@@ -352,6 +454,70 @@ def extract_source_embeddings(dataset_path: Path) -> np.ndarray:
         else:
             arr = np.asarray(emb)
         rows.append(arr)
+    matrix = np.asarray(rows, dtype=np.float32)
+    norms = np.linalg.norm(matrix, axis=1, keepdims=True)
+    norms = np.clip(norms, 1e-12, None)
+    return matrix / norms
+
+
+def candidate_dataset_id_columns(dataset: Dataset) -> list[str]:
+    candidates = [
+        "dataset_row_id",
+        "dataset_row_id_full",
+        "source_row_id",
+        "source_embedding_id",
+        "embedding_row_id",
+    ]
+    return [col for col in candidates if col in dataset.column_names]
+
+
+def resolve_subset_local_indices(dataset: Dataset, manifest_df: pd.DataFrame) -> list[int]:
+    manifest_row_count = len(manifest_df)
+    dataset_len = len(dataset)
+
+    if dataset_len == manifest_row_count:
+        for dataset_col in candidate_dataset_id_columns(dataset):
+            dataset_ids = [int(x) for x in dataset[dataset_col]]
+            manifest_ids = manifest_df["dataset_row_id"].astype(int).tolist()
+            if dataset_ids == manifest_ids:
+                return list(range(dataset_len))
+
+    manifest_ids = manifest_df["dataset_row_id"].astype(int).tolist()
+    for dataset_col in candidate_dataset_id_columns(dataset):
+        dataset_ids = pd.Series(dataset[dataset_col], dtype="Int64")
+        if dataset_ids.isna().any():
+            continue
+        if not dataset_ids.is_unique:
+            continue
+        id_to_local = {int(value): idx for idx, value in enumerate(dataset_ids.tolist())}
+        if all(dataset_row_id in id_to_local for dataset_row_id in manifest_ids):
+            return [id_to_local[dataset_row_id] for dataset_row_id in manifest_ids]
+
+    if manifest_ids and min(manifest_ids) >= 0 and max(manifest_ids) < dataset_len:
+        return manifest_ids
+
+    candidate_cols = candidate_dataset_id_columns(dataset)
+    raise IndexError(
+        "Could not align manifest dataset_row_id values to the subset dataset. "
+        f"Dataset rows={dataset_len}, manifest rows={manifest_row_count}, "
+        f"candidate ID columns={candidate_cols or 'none'}."
+    )
+
+
+def extract_source_embeddings_by_row_ids(
+    dataset_path: Path,
+    dataset_row_ids: list[int],
+    manifest_df: pd.DataFrame | None = None,
+) -> np.ndarray:
+    dataset = Dataset.load_from_disk(str(dataset_path))
+    if manifest_df is not None:
+        selected = dataset.select(resolve_subset_local_indices(dataset, manifest_df))
+    else:
+        selected = dataset.select(dataset_row_ids)
+    rows = []
+    for example in selected:
+        emb = example["domain_embeddings"][0]
+        rows.append(np.asarray(emb, dtype=np.float32))
     matrix = np.asarray(rows, dtype=np.float32)
     norms = np.linalg.norm(matrix, axis=1, keepdims=True)
     norms = np.clip(norms, 1e-12, None)
@@ -392,6 +558,7 @@ def summarize_numeric(values: np.ndarray) -> dict[str, float]:
 def compute_topk_self_retrieval(
     source_embeddings: np.ndarray,
     generated_embeddings: np.ndarray,
+    target_source_ids: np.ndarray | None = None,
     top_k: int = 10,
 ) -> pd.DataFrame:
     try:
@@ -409,12 +576,15 @@ def compute_topk_self_retrieval(
         scores = 1.0 - distances
 
     rows = []
+    if target_source_ids is None:
+        target_source_ids = np.arange(len(generated_embeddings))
     for i in range(len(generated_embeddings)):
         hits = indices[i].tolist()
-        rank = hits.index(i) + 1 if i in hits else None
+        target_id = int(target_source_ids[i])
+        rank = hits.index(target_id) + 1 if target_id in hits else None
         rows.append(
             {
-                "dataset_row_id": i,
+                "manifest_row_index": i,
                 "source_retrieval_rank_top10": rank,
                 "source_in_top1": bool(rank == 1),
                 "source_in_top5": bool(rank is not None and rank <= 5),
@@ -425,13 +595,47 @@ def compute_topk_self_retrieval(
     return pd.DataFrame(rows)
 
 
-def infer_training_dataset_path(test_dataset_path: Path) -> Path | None:
-    sibling = test_dataset_path.parent / "encoded_training_filtered"
-    return sibling if sibling.exists() else None
+def resolve_manifest_source_dataset_path(manifest_df: pd.DataFrame) -> Path | None:
+    if "source_dataset_path" not in manifest_df.columns:
+        return None
+    values = [
+        str(value).strip()
+        for value in manifest_df["source_dataset_path"].dropna().tolist()
+        if str(value).strip()
+    ]
+    unique_values = sorted(set(values))
+    if len(unique_values) != 1:
+        return None
+    candidate = Path(unique_values[0])
+    return candidate if candidate.exists() else None
 
 
-def infer_pickle_dir(dataset_path: Path) -> Path | None:
-    base_dir = infer_base_dir(dataset_path)
+def infer_training_dataset_path(
+    dataset_path: Path,
+    source_dataset_path: Path | None = None,
+    explicit_training_dataset_path: Path | None = None,
+) -> Path | None:
+    if explicit_training_dataset_path is not None:
+        return explicit_training_dataset_path if explicit_training_dataset_path.exists() else None
+
+    candidates = []
+    if source_dataset_path is not None:
+        candidates.append(source_dataset_path.parent / "encoded_training_filtered")
+    candidates.append(dataset_path.parent / "encoded_training_filtered")
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def infer_pickle_dir(
+    dataset_path: Path,
+    source_dataset_path: Path | None = None,
+    explicit_pickle_dir: Path | None = None,
+) -> Path | None:
+    if explicit_pickle_dir is not None:
+        return explicit_pickle_dir if explicit_pickle_dir.exists() else None
+    base_dir = infer_base_dir(source_dataset_path or dataset_path)
     if base_dir is None:
         return None
     candidate = base_dir / "pickle_ds_note_hadm_all"
@@ -546,6 +750,8 @@ def determine_readiness(integrity: dict[str, Any], quality_df: pd.DataFrame, pri
         reasons.append(f"Median source cosine is low ({median_cosine:.4f}).")
     if privacy_summary.get("exact_duplicates_vs_train", 0) > 0:
         reasons.append("Exact duplicate(s) against train text detected.")
+    if privacy_summary.get("train_text_checks_skipped_reason"):
+        reasons.append(f"Train text screen was skipped or incomplete: {privacy_summary['train_text_checks_skipped_reason']}")
 
     if reasons:
         return "CAUTION", reasons
@@ -611,14 +817,31 @@ def main() -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     manifest_df = load_manifest(manifest_path)
+    manifest_row_count_full = len(manifest_df)
+    if args.start_index is not None or args.end_index is not None:
+        start = 0 if args.start_index is None else int(args.start_index)
+        end = manifest_row_count_full if args.end_index is None else int(args.end_index)
+        if start < 0 or end < start or end > manifest_row_count_full:
+            raise ValueError(
+                f"Invalid shard slice [{start}, {end}) for manifest with {manifest_row_count_full} rows."
+            )
+        manifest_df = manifest_df.iloc[start:end].reset_index(drop=True)
     dataset = Dataset.load_from_disk(str(dataset_path))
     dataset_len = len(dataset)
 
     split_manifest_df = None
     if args.split_manifest_path and Path(args.split_manifest_path).exists():
         split_manifest_df = load_split_manifest(Path(args.split_manifest_path))
+    manifest_source_dataset_path = resolve_manifest_source_dataset_path(manifest_df)
 
-    integrity = integrity_checks(manifest_df, dataset_len, split_manifest_df)
+    expected_generation_condition = args.expected_generation_condition or None
+    integrity = integrity_checks(
+        manifest_df,
+        dataset_len,
+        split_manifest_df,
+        expected_generation_condition=expected_generation_condition,
+        allow_subset_dataset_rows=args.allow_subset_dataset_rows,
+    )
 
     # Augment / validate leakage fields against split manifest if available.
     if split_manifest_df is not None and "dataset_row_id" in manifest_df.columns:
@@ -656,24 +879,59 @@ def main() -> None:
 
     quality_rows = [quality_metrics_from_text(text) for text in manifest_df["generated_text"].fillna("").tolist()]
     quality_df = pd.concat([manifest_df.copy(), pd.DataFrame(quality_rows)], axis=1)
+    quality_df["manifest_row_index"] = np.arange(len(quality_df))
 
-    source_embeddings = extract_source_embeddings(dataset_path)
-    generated_embeddings, resolved_embedding_device = encode_generated_notes(
-        args.embedding_model_name,
-        quality_df["generated_text"].fillna("").tolist(),
-        args.embedding_device,
-        args.embedding_batch_size,
-    )
+    if args.allow_subset_dataset_rows:
+        if "dataset_row_id" not in quality_df.columns:
+            raise ValueError("--allow_subset_dataset_rows requires dataset_row_id in the manifest.")
+        selected_row_ids = quality_df["dataset_row_id"].astype(int).tolist()
+        source_embeddings = extract_source_embeddings_by_row_ids(
+            dataset_path,
+            selected_row_ids,
+            manifest_df=quality_df,
+        )
+        retrieval_target_ids = np.arange(len(selected_row_ids))
+    else:
+        source_embeddings = extract_source_embeddings(dataset_path)
+        retrieval_target_ids = None
+    precomputed_generated_embeddings_path = None
+    if args.precomputed_generated_embeddings_path:
+        precomputed_generated_embeddings_path = Path(args.precomputed_generated_embeddings_path)
+        generated_embeddings = load_precomputed_generated_embeddings(
+            precomputed_generated_embeddings_path,
+            expected_rows=len(quality_df),
+            start_index=args.start_index,
+            end_index=args.end_index,
+        )
+        resolved_embedding_device = "precomputed"
+    else:
+        generated_embeddings, resolved_embedding_device = encode_generated_notes(
+            args.embedding_model_name,
+            quality_df["generated_text"].fillna("").tolist(),
+            args.embedding_device,
+            args.embedding_batch_size,
+        )
 
     source_cosine = np.sum(source_embeddings * generated_embeddings, axis=1)
-    retrieval_df = compute_topk_self_retrieval(source_embeddings, generated_embeddings, top_k=10)
+    retrieval_df = compute_topk_self_retrieval(
+        source_embeddings,
+        generated_embeddings,
+        target_source_ids=retrieval_target_ids,
+        top_k=10,
+    )
     quality_df["source_to_generated_cosine"] = source_cosine
-    quality_df = quality_df.merge(retrieval_df, on="dataset_row_id", how="left")
+    quality_df = quality_df.merge(retrieval_df, on="manifest_row_index", how="left")
 
     quality_df["leakage_group"] = quality_df["patient_disjoint_from_train"].map(group_label)
 
     # Train embedding nearest-neighbor privacy screen.
-    training_dataset_path = infer_training_dataset_path(dataset_path)
+    explicit_training_dataset_path = Path(args.training_dataset_path) if args.training_dataset_path else None
+    explicit_pickle_dir = Path(args.pickle_dir) if args.pickle_dir else None
+    training_dataset_path = infer_training_dataset_path(
+        dataset_path,
+        source_dataset_path=manifest_source_dataset_path,
+        explicit_training_dataset_path=explicit_training_dataset_path,
+    )
     nearest_train_cosine = np.full(len(quality_df), np.nan, dtype=np.float32)
     nearest_train_index = np.full(len(quality_df), -1, dtype=np.int64)
     if training_dataset_path and training_dataset_path.exists():
@@ -716,7 +974,11 @@ def main() -> None:
     train_text_hashes: set[str] | None = None
     train_text_checks_skipped_reason = None
     train_candidate_rows_df = None
-    pickle_dir = infer_pickle_dir(dataset_path)
+    pickle_dir = infer_pickle_dir(
+        dataset_path,
+        source_dataset_path=manifest_source_dataset_path,
+        explicit_pickle_dir=explicit_pickle_dir,
+    )
     if split_manifest_df is not None and pickle_dir is not None and training_dataset_path is not None:
         try:
             train_rows = split_manifest_df.loc[split_manifest_df["split"] == "train"].copy()
@@ -778,6 +1040,14 @@ def main() -> None:
         "embedding_device_requested": args.embedding_device,
         "embedding_device_resolved": resolved_embedding_device,
         "embedding_batch_size": args.embedding_batch_size,
+        "precomputed_generated_embeddings_path": (
+            str(precomputed_generated_embeddings_path.resolve()) if precomputed_generated_embeddings_path else None
+        ),
+        "manifest_row_count_full": manifest_row_count_full,
+        "manifest_row_slice": {
+            "start_index": args.start_index,
+            "end_index": args.end_index,
+        },
         "sample_size_for_manual_review": args.sample_size_for_manual_review,
         "package_versions": package_versions(),
         "integrity": integrity,
@@ -805,6 +1075,8 @@ def main() -> None:
     # Save tables and report.
     quality_columns = [
         "generation_id",
+        "generation_index",
+        "manifest_row_index",
         "dataset_row_id",
         "note_id",
         "subject_id",
@@ -824,6 +1096,7 @@ def main() -> None:
         "section_header_count",
         "has_minimum_section_structure",
         "phi_like_flag",
+        "generated_text_hash",
     ]
     quality_df.loc[:, [col for col in quality_columns if col in quality_df.columns]].to_csv(
         output_dir / "vanilla_quality_table.csv",
@@ -832,6 +1105,8 @@ def main() -> None:
 
     faithfulness_columns = [
         "generation_id",
+        "generation_index",
+        "manifest_row_index",
         "dataset_row_id",
         "note_id",
         "subject_id",

@@ -73,18 +73,15 @@ class LlamaForEmbeddingLM(LlamaForCausalLM):
                 # This reduces memory fragmentation and is faster
                 adapted_embs = self.adapter(domain_emb_tensor)
                 
-                # Replace embedding positions with adapted embeddings
-                emb_i = 0
-                batch_size, seq_len = input_ids.shape
-                for i in range(batch_size):
-                    for j in range(seq_len):
-                        if emb_token_mask[i, j]:
-                            embs[i, j] = adapted_embs[emb_i]
-                            emb_i += 1
-                            if emb_i >= len(adapted_embs):
-                                break
-                    if emb_i >= len(adapted_embs):
-                        break
+                # Replace embedding positions with adapted embeddings on a cloned tensor
+                # to avoid in-place autograd issues during DDP/training.
+                num_slots = int(emb_token_mask.sum().item())
+                if num_slots != len(adapted_embs):
+                    raise ValueError(
+                        f"Mismatch between embedding-token slots ({num_slots}) and provided domain embeddings ({len(adapted_embs)})."
+                    )
+                embs = embs.clone()
+                embs[emb_token_mask] = adapted_embs
         
         kwargs['inputs_embeds']=embs
         kwargs['input_ids']=None

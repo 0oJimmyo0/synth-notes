@@ -248,6 +248,54 @@ def extract_embedding(example: dict[str, Any]) -> np.ndarray:
     return np.asarray(first)
 
 
+def extract_source_metadata_from_example(example: dict[str, Any]) -> dict[str, Any]:
+    allowed_keys = [
+        "source_row_id",
+        "dataset_row_id",
+        "embedding_row_id",
+        "note_id",
+        "subject_id",
+        "hadm_id",
+        "split",
+        "source_embedding_id",
+        "patient_disjoint_from_train",
+        "hadm_disjoint_from_train",
+        "note_disjoint_from_train",
+        "patient_overlap_with_train",
+        "hadm_overlap_with_train",
+        "note_overlap_with_train",
+        "axis_id",
+        "axis_label",
+        "alpha",
+        "normalized_after_steering",
+        "random_shift_norm",
+        "editor_model",
+        "edited_text",
+        "post_edit_source_cosine",
+        "source_dataset_path",
+        "source_split",
+        "selection_query",
+        "steering_run_metadata_path",
+    ]
+    return {key: normalize_missing(example.get(key)) for key in allowed_keys if key in example}
+
+
+def dataset_has_embedded_manifest_metadata(dataset: Dataset) -> bool:
+    """Detect shifted/subset datasets that already carry row-level provenance."""
+    cols = set(dataset.column_names)
+    required = {"dataset_row_id", "note_id", "subject_id", "hadm_id", "split"}
+    leakage_or_steering = {
+        "patient_disjoint_from_train",
+        "hadm_disjoint_from_train",
+        "note_disjoint_from_train",
+        "axis_id",
+        "axis_label",
+        "alpha",
+        "source_split",
+    }
+    return required.issubset(cols) and bool(cols & leakage_or_steering)
+
+
 def repetition_or_collapse_flag(text: str) -> bool:
     stripped = text.strip()
     if not stripped:
@@ -323,20 +371,32 @@ def build_source_record(
         "hadm_overlap_with_train": source_row.get("hadm_overlap_with_train"),
         "note_overlap_with_train": source_row.get("note_overlap_with_train"),
         "dataset_path": dataset_path,
+        "axis_id": source_row.get("axis_id"),
+        "axis_label": source_row.get("axis_label"),
+        "alpha": source_row.get("alpha"),
+        "normalized_after_steering": source_row.get("normalized_after_steering"),
+        "random_shift_norm": source_row.get("random_shift_norm"),
+        "editor_model": source_row.get("editor_model"),
+        "edited_text": source_row.get("edited_text"),
+        "post_edit_source_cosine": source_row.get("post_edit_source_cosine"),
+        "source_dataset_path": source_row.get("source_dataset_path"),
+        "source_split": source_row.get("source_split"),
+        "selection_query": source_row.get("selection_query"),
+        "steering_run_metadata_path": source_row.get("steering_run_metadata_path"),
     }
 
 
 def validate_source_records(
     source_records: list[dict[str, Any]],
     embeddings: list[np.ndarray],
-    split_manifest_path: str | None,
+    enforce_manifest_alignment: bool,
 ) -> None:
     if len(source_records) != len(embeddings):
         raise ValueError(
             f"Source record count ({len(source_records)}) must equal embedding count ({len(embeddings)})"
         )
 
-    if split_manifest_path:
+    if enforce_manifest_alignment:
         for idx, record in enumerate(source_records):
             dataset_row_id = record.get("dataset_row_id")
             if dataset_row_id is not None and int(dataset_row_id) != idx:
@@ -448,6 +508,7 @@ def main() -> None:
 
     embeddings: list[np.ndarray] = []
     source_records: list[dict[str, Any]] = []
+    enforce_manifest_alignment = False
 
     if args.embeddings_file:
         print(f"Loading embeddings from: {args.embeddings_file}")
@@ -486,10 +547,21 @@ def main() -> None:
             if split_manifest_path and split_label:
                 split_rows = load_split_manifest_records(split_manifest_path, split_label)
                 if len(split_rows) != len(dataset):
-                    raise ValueError(
-                        f"Split manifest row count ({len(split_rows)}) does not match dataset row count ({len(dataset)}) "
-                        f"for split='{split_label}' and dataset='{dataset_path}'."
-                    )
+                    if dataset_has_embedded_manifest_metadata(dataset):
+                        print(
+                            "  Warning: split manifest row count "
+                            f"({len(split_rows)}) does not match dataset row count ({len(dataset)}) for "
+                            f"split='{split_label}' and dataset='{dataset_path}'. "
+                            "Falling back to embedded dataset provenance."
+                        )
+                        split_rows = None
+                    else:
+                        raise ValueError(
+                            f"Split manifest row count ({len(split_rows)}) does not match dataset row count ({len(dataset)}) "
+                            f"for split='{split_label}' and dataset='{dataset_path}'."
+                        )
+                else:
+                    enforce_manifest_alignment = True
 
             remaining = None
             if args.max_samples is not None:
@@ -503,10 +575,15 @@ def main() -> None:
 
             print(f"  {dataset_path}: {len(dataset)} rows")
             for idx, example in enumerate(dataset):
+                example_source = extract_source_metadata_from_example(example)
+                merged_source = {}
+                if split_rows is not None:
+                    merged_source.update(split_rows[idx])
+                merged_source.update(example_source)
                 embeddings.append(extract_embedding(example))
                 source_records.append(
                     build_source_record(
-                        source_row=split_rows[idx] if split_rows is not None else None,
+                        source_row=merged_source if merged_source else None,
                         dataset_path=dataset_path,
                         dataset_row_id=idx,
                         split_label=split_label,
@@ -518,7 +595,7 @@ def main() -> None:
     if not embeddings:
         raise ValueError("No embeddings loaded")
 
-    validate_source_records(source_records, embeddings, split_manifest_path)
+    validate_source_records(source_records, embeddings, enforce_manifest_alignment)
 
     total_loaded = len(embeddings)
     slice_start = max(0, int(args.start_index))
@@ -634,13 +711,13 @@ def main() -> None:
                     "hadm_overlap_with_train": source.get("hadm_overlap_with_train"),
                     "note_overlap_with_train": source.get("note_overlap_with_train"),
                     "axis_id": None,
-                    "axis_label": None,
-                    "alpha": None,
-                    "normalized_after_steering": None,
-                    "random_shift_norm": None,
-                    "editor_model": None,
-                    "edited_text": None,
-                    "post_edit_source_cosine": None,
+                    "axis_label": source.get("axis_label"),
+                    "alpha": source.get("alpha"),
+                    "normalized_after_steering": source.get("normalized_after_steering"),
+                    "random_shift_norm": source.get("random_shift_norm"),
+                    "editor_model": source.get("editor_model"),
+                    "edited_text": source.get("edited_text"),
+                    "post_edit_source_cosine": source.get("post_edit_source_cosine"),
                     "script_path": run_metadata["script_path"],
                     "git_commit": run_metadata["git_commit"],
                     "cli_args_json": run_metadata["cli_args_json"],
@@ -650,7 +727,12 @@ def main() -> None:
                     "manifest_output_path": run_metadata["manifest_output_path"],
                     "run_metadata_path": str(run_metadata_path),
                     "dataset_path": source.get("dataset_path"),
+                    "source_dataset_path": source.get("source_dataset_path"),
+                    "source_split": source.get("source_split"),
+                    "selection_query": source.get("selection_query"),
+                    "steering_run_metadata_path": source.get("steering_run_metadata_path"),
                 }
+                row["axis_id"] = source.get("axis_id")
                 row.update(quality_flags(note))
                 row_non_null_if_available(row, ["generation_id", "generation_condition", "checkpoint_path", "backbone_path"])
 
