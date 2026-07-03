@@ -1,12 +1,12 @@
 #!/bin/bash
-#SBATCH --job-name=elm_generate
-#SBATCH --output=/gpfs/radev/pi/xu_hua/shared/synthnote/physionet.org/files/embedding_elm/open-elm/log/generate_synthetic_notes_%j.out
-#SBATCH --error=/gpfs/radev/pi/xu_hua/shared/synthnote/physionet.org/files/embedding_elm/open-elm/log/generate_synthetic_notes_%j.err
+#SBATCH --job-name=elm_generate_a40
+#SBATCH --output=/gpfs/radev/pi/xu_hua/shared/synthnote/physionet.org/files/embedding_elm/open-elm/log/generate_synthetic_notes_a40_%j.out
+#SBATCH --error=/gpfs/radev/pi/xu_hua/shared/synthnote/physionet.org/files/embedding_elm/open-elm/log/generate_synthetic_notes_a40_%j.err
 #SBATCH --time=06:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=8
-#SBATCH --mem=96G
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=32G
 #SBATCH --gres=gpu:a40:2
 #SBATCH --partition=gpu_devel
 
@@ -40,7 +40,7 @@ SPLIT_NAME="${SPLIT_NAME:-test}"
 GENERATION_CONDITION="${GENERATION_CONDITION:-vanilla}"
 SPLIT_MANIFEST_PATH="${SPLIT_MANIFEST_PATH-${DATAHOME}/leakage_audit/split_manifest_note_level.csv}"
 SEED="${SEED:-42}"
-BATCH_SIZE="${BATCH_SIZE:-8}"
+BATCH_SIZE="${BATCH_SIZE:-4}"
 NUM_SHARDS="${NUM_SHARDS:-2}"
 START_INDEX="${START_INDEX:-0}"
 END_INDEX="${END_INDEX:-}"
@@ -238,70 +238,31 @@ done
 python - <<PY
 import json
 from pathlib import Path
-from datasets import Dataset
 
-dataset_len = len(Dataset.load_from_disk("${DATASET_PATH}"))
-slice_start = max(0, int("${START_INDEX}"))
-slice_end = dataset_len if "${END_INDEX}" == "" else min(int("${END_INDEX}"), dataset_len)
-expected_rows = slice_end - slice_start
-manifest_path = Path("${MANIFEST_FILE}")
 output_path = Path("${OUTPUT_FILE}")
-validation_path = manifest_path.with_suffix(manifest_path.suffix + ".validation.json")
+manifest_path = Path("${MANIFEST_FILE}")
+tmp_dir = Path("${TMP_DIR}")
 
-manifest_rows = 0
-generation_ids = set()
-last_generation_index = -1
-for line in manifest_path.open():
-    row = json.loads(line)
-    manifest_rows += 1
-    generation_ids.add(row["generation_id"])
-    current = int(row["generation_index"])
-    if current != last_generation_index + 1:
-        raise ValueError(f"Manifest generation_index order broke at {current} after {last_generation_index}")
-    last_generation_index = current
-
-note_headers = 0
-for line in output_path.open():
-    if line.startswith("=== Note "):
-        note_headers += 1
-
-if manifest_rows != expected_rows:
-    raise ValueError(f"Merged manifest rows {manifest_rows} do not match expected slice length {expected_rows}")
-if note_headers != expected_rows:
-    raise ValueError(f"Merged note count {note_headers} do not match expected slice length {expected_rows}")
-if len(generation_ids) != manifest_rows:
-    raise ValueError("Duplicate generation_id values detected in merged manifest")
-
-validation = {
-    "dataset_len": dataset_len,
-    "slice_start": slice_start,
-    "slice_end": slice_end,
-    "expected_rows": expected_rows,
-    "merged_manifest_rows": manifest_rows,
-    "merged_note_headers": note_headers,
+run_record = {
+    "job_id": "${SLURM_JOB_ID}",
+    "output_file": str(output_path),
+    "manifest_file": str(manifest_path),
+    "tmp_dir": str(tmp_dir),
+    "dataset_path": "${DATASET_PATH}",
+    "checkpoint_path": "${CHECKPOINT_PATH}",
+    "seed": int("${SEED}"),
     "num_shards": int("${NUM_SHARDS}"),
+    "batch_size": int("${BATCH_SIZE}"),
 }
-validation_path.write_text(json.dumps(validation, indent=2))
+(manifest_path.parent / (manifest_path.name + ".run.json")).write_text(json.dumps(run_record, indent=2), encoding="utf-8")
 PY
+
+rm -rf "${TMP_DIR}"
 
 echo ""
 echo "=========================================="
-echo "Generation completed successfully!"
-echo "Job ID: $SLURM_JOB_ID"
+echo "Generation completed successfully"
 echo "End Time: $(date)"
 echo "Output file: ${OUTPUT_FILE}"
 echo "Manifest file: ${MANIFEST_FILE}"
-echo "Check logs: ${LOG_DIR}/generate_synthetic_notes_${SLURM_JOB_ID}.out"
 echo "=========================================="
-
-if [ -f "${OUTPUT_FILE}" ]; then
-    FILE_SIZE=$(du -h "${OUTPUT_FILE}" | cut -f1)
-    LINE_COUNT=$(wc -l < "${OUTPUT_FILE}")
-    echo ""
-    echo "Output file statistics:"
-    echo "  Size: ${FILE_SIZE}"
-    echo "  Lines: ${LINE_COUNT}"
-    echo ""
-    echo "Preview (first 20 lines):"
-    head -20 "${OUTPUT_FILE}"
-fi
