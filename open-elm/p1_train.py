@@ -26,6 +26,7 @@ from src.utils import count_trainable_parameters, collate_function_dynamic_paddi
 from datasets import Dataset
 from trl import SFTTrainer, SFTConfig
 from transformers import TrainerCallback
+from peft import LoraConfig, get_peft_model
 import torch
 from functools import partial
 import numpy as np
@@ -51,6 +52,59 @@ def set_random_seed(seed: int) -> None:
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
 
+
+def parse_csv_list(raw_value: str) -> list[str]:
+    return [item.strip() for item in raw_value.split(",") if item.strip()]
+
+
+def freeze_for_adapter_only(elm: torch.nn.Module) -> None:
+    for param in elm.model.parameters():
+        param.requires_grad = False
+    for param in elm.lm_head.parameters():
+        param.requires_grad = False
+    for param in elm.adapter.parameters():
+        param.requires_grad = True
+
+
+def build_trainable_model(
+    elm: torch.nn.Module,
+    train_strategy: str,
+    lora_r: int,
+    lora_alpha: int,
+    lora_dropout: float,
+    lora_target_modules: list[str],
+) -> torch.nn.Module:
+    if train_strategy == "adapter_only":
+        freeze_for_adapter_only(elm)
+        return elm
+
+    if train_strategy == "adapter_lora":
+        freeze_for_adapter_only(elm)
+        peft_config = LoraConfig(
+            r=lora_r,
+            lora_alpha=lora_alpha,
+            lora_dropout=lora_dropout,
+            bias="none",
+            task_type="CAUSAL_LM",
+            target_modules=lora_target_modules,
+            modules_to_save=["adapter"],
+        )
+        elm = get_peft_model(elm, peft_config)
+        if hasattr(elm, "enable_input_require_grads"):
+            elm.enable_input_require_grads()
+        return elm
+
+    raise ValueError(f"Unsupported train strategy: {train_strategy}")
+
+
+def configure_gradient_checkpointing(model: torch.nn.Module, train_strategy: str) -> tuple[bool, dict | None]:
+    # LoRA + DDP can hit the "mark a variable ready twice" failure with the
+    # default re-entrant checkpointing path. Use the newer non-reentrant path
+    # so we keep the same training objective while avoiding the autograd clash.
+    if train_strategy == "adapter_lora":
+        return True, {"use_reentrant": False}
+    return True, None
+ 
 def main():
     parser = argparse.ArgumentParser(description="Train a Phase 1 of the embedding language model.")
     parser.add_argument("--datahome", type=str, required=True, help="Path to the data directory")
@@ -65,6 +119,22 @@ def main():
     parser.add_argument("--max_seq_length", type=int, default=2048, help="Maximum sequence length (reduce to save memory)")
     parser.add_argument("--resume_from_checkpoint", type=str, default=None, help="Path to checkpoint to resume from")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
+    parser.add_argument(
+        "--train_strategy",
+        type=str,
+        default="adapter_only",
+        choices=["adapter_only", "adapter_lora"],
+        help="Train only the adapter or train adapter plus LoRA on decoder attention blocks",
+    )
+    parser.add_argument("--lora_r", type=int, default=16, help="LoRA rank when using adapter_lora")
+    parser.add_argument("--lora_alpha", type=int, default=32, help="LoRA alpha when using adapter_lora")
+    parser.add_argument("--lora_dropout", type=float, default=0.05, help="LoRA dropout when using adapter_lora")
+    parser.add_argument(
+        "--lora_target_modules",
+        type=str,
+        default="q_proj,k_proj,v_proj,o_proj",
+        help="Comma-separated module names to receive LoRA weights when using adapter_lora",
+    )
     args = parser.parse_args()
 
     local_rank = get_local_rank()
@@ -110,22 +180,44 @@ def main():
     if is_main_process():
         print("All parameters that require grad:{}".format(count_trainable_parameters(elm)))
 
-    # freeze everything but the adapter
-    for param in elm.model.parameters():
-        param.requires_grad = False
-    for param in elm.lm_head.parameters():
-        param.requires_grad = False
-    for param in elm.adapter.parameters():
-        param.requires_grad = True
+    lora_target_modules = parse_csv_list(args.lora_target_modules)
+    elm = build_trainable_model(
+        elm=elm,
+        train_strategy=args.train_strategy,
+        lora_r=args.lora_r,
+        lora_alpha=args.lora_alpha,
+        lora_dropout=args.lora_dropout,
+        lora_target_modules=lora_target_modules,
+    )
+    gradient_checkpointing_enabled, gradient_checkpointing_kwargs = configure_gradient_checkpointing(
+        elm,
+        args.train_strategy,
+    )
+
+    if hasattr(elm, "config"):
+        elm.config.use_cache = False
 
     if is_main_process():
-        print("After freezing, now the number of parameters that require grad:{}".format(count_trainable_parameters(elm)))
+        print(f"Train strategy: {args.train_strategy}")
+        if args.train_strategy == "adapter_lora":
+            print(
+                "LoRA config: "
+                f"r={args.lora_r}, alpha={args.lora_alpha}, dropout={args.lora_dropout}, "
+                f"targets={lora_target_modules}"
+            )
+        print("After freezing/wrapping, now the number of parameters that require grad:{}".format(count_trainable_parameters(elm)))
     
     # Enable gradient checkpointing to save memory
-    if hasattr(elm.model, 'gradient_checkpointing_enable'):
-        elm.model.gradient_checkpointing_enable()
+    if gradient_checkpointing_enabled and hasattr(elm.model, 'gradient_checkpointing_enable'):
+        if gradient_checkpointing_kwargs:
+            elm.model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=gradient_checkpointing_kwargs)
+        else:
+            elm.model.gradient_checkpointing_enable()
         if is_main_process():
-            print("Gradient checkpointing enabled to save GPU memory")
+            if gradient_checkpointing_kwargs:
+                print(f"Gradient checkpointing enabled with kwargs={gradient_checkpointing_kwargs}")
+            else:
+                print("Gradient checkpointing enabled to save GPU memory")
     
     # Calculate training steps
     effective_batch_size = args.batch_size * args.gradient_accumulation_steps
@@ -145,7 +237,8 @@ def main():
         remove_unused_columns=False,
         max_seq_length=args.max_seq_length,
         bf16=True,
-        gradient_checkpointing=True,  # Enable gradient checkpointing to save memory
+        gradient_checkpointing=gradient_checkpointing_enabled,
+        gradient_checkpointing_kwargs=gradient_checkpointing_kwargs,
         dataloader_pin_memory=False,  # Disable pin_memory to save memory
         dataloader_num_workers=0,     # Reduce workers to save memory
         # Use 8-bit optimizer to reduce memory usage (requires bitsandbytes)

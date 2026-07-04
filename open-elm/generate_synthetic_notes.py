@@ -28,6 +28,7 @@ import torch
 import transformers
 from datasets import Dataset
 import datasets as datasets_lib
+from peft import PeftConfig, PeftModel
 from transformers import AutoTokenizer
 
 from src.model import LlamaForEmbeddingLM
@@ -218,6 +219,41 @@ def normalize_missing(value: Any) -> Any:
     if isinstance(value, (np.floating,)):
         return float(value)
     return value
+
+
+def load_generation_model(checkpoint_path: str, device: str) -> tuple[torch.nn.Module, dict[str, Any]]:
+    checkpoint_dir = Path(checkpoint_path)
+    peft_config_path = checkpoint_dir / "adapter_config.json"
+
+    if peft_config_path.exists():
+        peft_config = PeftConfig.from_pretrained(checkpoint_path)
+        base_model_path = peft_config.base_model_name_or_path
+        if not base_model_path:
+            raise ValueError(f"PEFT checkpoint at {checkpoint_path} is missing base_model_name_or_path")
+        base_model = LlamaForEmbeddingLM.from_pretrained(
+            base_model_path,
+            torch_dtype=torch.bfloat16,
+            device_map=device,
+            low_cpu_mem_usage=True,
+        )
+        model = PeftModel.from_pretrained(base_model, checkpoint_path)
+        metadata = {
+            "checkpoint_format": "peft",
+            "resolved_base_model_path": os.path.abspath(base_model_path),
+        }
+        return model, metadata
+
+    model = LlamaForEmbeddingLM.from_pretrained(
+        checkpoint_path,
+        torch_dtype=torch.bfloat16,
+        device_map=device,
+        low_cpu_mem_usage=True,
+    )
+    metadata = {
+        "checkpoint_format": "full_model",
+        "resolved_base_model_path": os.path.abspath(checkpoint_path),
+    }
+    return model, metadata
 
 
 def load_split_manifest_records(split_manifest_path: str, split_label: str) -> list[dict[str, Any]]:
@@ -493,12 +529,10 @@ def main() -> None:
     print("")
 
     tokenizer = AutoTokenizer.from_pretrained(args.backbone_model_path)
-    model = LlamaForEmbeddingLM.from_pretrained(
-        args.checkpoint_path,
-        torch_dtype=torch.bfloat16,
-        device_map=args.device,
-    )
+    model, model_load_metadata = load_generation_model(args.checkpoint_path, args.device)
     model.eval()
+    print(f"Checkpoint format: {model_load_metadata['checkpoint_format']}")
+    print(f"Resolved base model path: {model_load_metadata['resolved_base_model_path']}")
     print("✓ Model loaded successfully")
     print("")
 

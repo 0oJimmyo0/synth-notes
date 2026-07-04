@@ -42,6 +42,11 @@ EVAL_STEPS="${EVAL_STEPS:-100}"
 SAVE_STEPS="${SAVE_STEPS:-0.25}"
 MAX_SEQ_LENGTH="${MAX_SEQ_LENGTH:-2048}"
 RESUME_FROM_CHECKPOINT="${RESUME_FROM_CHECKPOINT:-}"
+TRAIN_STRATEGY="${TRAIN_STRATEGY:-adapter_only}"
+LORA_R="${LORA_R:-16}"
+LORA_ALPHA="${LORA_ALPHA:-32}"
+LORA_DROPOUT="${LORA_DROPOUT:-0.05}"
+LORA_TARGET_MODULES="${LORA_TARGET_MODULES:-q_proj,k_proj,v_proj,o_proj}"
 
 if [ ! -d "${ADAPT_DATAHOME}/encoded_training" ] && [ -d "${ADAPT_DATAHOME}/encoded_train" ]; then
     ln -sfn "${ADAPT_DATAHOME}/encoded_train" "${ADAPT_DATAHOME}/encoded_training"
@@ -87,6 +92,11 @@ echo "Num train epochs: ${NUM_TRAIN_EPOCHS}"
 echo "Eval steps: ${EVAL_STEPS}"
 echo "Save steps: ${SAVE_STEPS}"
 echo "Max seq length: ${MAX_SEQ_LENGTH}"
+echo "Train strategy: ${TRAIN_STRATEGY}"
+echo "LoRA r: ${LORA_R}"
+echo "LoRA alpha: ${LORA_ALPHA}"
+echo "LoRA dropout: ${LORA_DROPOUT}"
+echo "LoRA target modules: ${LORA_TARGET_MODULES}"
 echo "Resume from checkpoint: ${RESUME_FROM_CHECKPOINT:-<none>}"
 echo "=========================================="
 echo ""
@@ -128,6 +138,11 @@ CMD=(
   --checkpoint_path "${CHECKPOINT_PATH}"
   --max_seq_length "${MAX_SEQ_LENGTH}"
   --seed 42
+  --train_strategy "${TRAIN_STRATEGY}"
+  --lora_r "${LORA_R}"
+  --lora_alpha "${LORA_ALPHA}"
+  --lora_dropout "${LORA_DROPOUT}"
+  --lora_target_modules "${LORA_TARGET_MODULES}"
 )
 
 if [ -n "${RESUME_FROM_CHECKPOINT}" ]; then
