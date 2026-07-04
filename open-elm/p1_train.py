@@ -2,6 +2,7 @@ import argparse
 import os
 import shutil
 import sys
+import random
 
 # Prevent DeepSpeed from being imported (causes CUDA_HOME errors)
 # Set environment variables before any imports that might trigger DeepSpeed
@@ -27,6 +28,28 @@ from trl import SFTTrainer, SFTConfig
 from transformers import TrainerCallback
 import torch
 from functools import partial
+import numpy as np
+
+
+def get_local_rank() -> int:
+    return int(os.environ.get("LOCAL_RANK", "-1"))
+
+
+def get_world_size() -> int:
+    return int(os.environ.get("WORLD_SIZE", "1"))
+
+
+def is_main_process() -> bool:
+    local_rank = get_local_rank()
+    return local_rank in (-1, 0)
+
+
+def set_random_seed(seed: int) -> None:
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
 
 def main():
     parser = argparse.ArgumentParser(description="Train a Phase 1 of the embedding language model.")
@@ -41,7 +64,14 @@ def main():
     parser.add_argument("--checkpoint_path", type=str, default="initial_elm_model", help="Path to initial model checkpoint")
     parser.add_argument("--max_seq_length", type=int, default=2048, help="Maximum sequence length (reduce to save memory)")
     parser.add_argument("--resume_from_checkpoint", type=str, default=None, help="Path to checkpoint to resume from")
+    parser.add_argument("--seed", type=int, default=42, help="Random seed")
     args = parser.parse_args()
+
+    local_rank = get_local_rank()
+    world_size = get_world_size()
+    using_ddp = world_size > 1
+
+    set_random_seed(args.seed)
 
     # load datasets
     training_dataset = Dataset.load_from_disk(args.datahome+"encoded_training")
@@ -49,12 +79,36 @@ def main():
 
     # load pre-trained model
     device = "cuda" if torch.cuda.is_available() else "cpu"
+    if torch.cuda.is_available() and local_rank >= 0:
+        torch.cuda.set_device(local_rank)
+
+    if torch.cuda.is_available():
+        if using_ddp and local_rank >= 0:
+            device_map = {"": local_rank}
+        else:
+            device_map = device
+    else:
+        device_map = "cpu"
+
+    if is_main_process():
+        print("=" * 60)
+        print("Distributed Training Configuration")
+        print("=" * 60)
+        print(f"LOCAL_RANK: {local_rank}")
+        print(f"WORLD_SIZE: {world_size}")
+        print(f"Using DDP: {using_ddp}")
+        print(f"Device map: {device_map}")
+        print("=" * 60)
+        print("")
+
     elm = LlamaForEmbeddingLM.from_pretrained(
         args.checkpoint_path, 
         torch_dtype=torch.bfloat16,
-        device_map=device)
+        device_map=device_map,
+        low_cpu_mem_usage=True)
 
-    print("All parameters that require grad:{}".format(count_trainable_parameters(elm)))
+    if is_main_process():
+        print("All parameters that require grad:{}".format(count_trainable_parameters(elm)))
 
     # freeze everything but the adapter
     for param in elm.model.parameters():
@@ -64,12 +118,14 @@ def main():
     for param in elm.adapter.parameters():
         param.requires_grad = True
 
-    print("After freezing, now the number of parameters that require grad:{}".format(count_trainable_parameters(elm)))
+    if is_main_process():
+        print("After freezing, now the number of parameters that require grad:{}".format(count_trainable_parameters(elm)))
     
     # Enable gradient checkpointing to save memory
     if hasattr(elm.model, 'gradient_checkpointing_enable'):
         elm.model.gradient_checkpointing_enable()
-        print("Gradient checkpointing enabled to save GPU memory")
+        if is_main_process():
+            print("Gradient checkpointing enabled to save GPU memory")
     
     # Calculate training steps
     effective_batch_size = args.batch_size * args.gradient_accumulation_steps
@@ -96,6 +152,10 @@ def main():
         # This can save 2-4GB of GPU memory
         optim="adamw_bnb_8bit" if torch.cuda.is_available() else "adamw_torch",  # 8-bit AdamW optimizer
         save_total_limit=3,  # Keep only the last 3 checkpoints to save disk space (each checkpoint is ~30GB)
+        # The ELM adapter path can appear partially unused to DDP depending on how
+        # the trainer wraps the forward/loss path, so keep unused-parameter
+        # detection on for the distributed adapter-only setting.
+        ddp_find_unused_parameters=True if using_ddp else None,
     )
 
     # Create a collate function with max_seq_length bound
@@ -132,7 +192,7 @@ def main():
             if state.global_step % clear_frequency == 0 and torch.cuda.is_available():
                 torch.cuda.empty_cache()
                 # Log memory usage occasionally for monitoring
-                if state.global_step % 100 == 0:
+                if state.global_step % 100 == 0 and is_main_process():
                     if torch.cuda.is_available():
                         allocated = torch.cuda.memory_allocated() / 1024**3  # GB
                         reserved = torch.cuda.memory_reserved() / 1024**3  # GB
@@ -143,7 +203,8 @@ def main():
     # Clear cache before training to reduce memory fragmentation
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
-        print("Cleared CUDA cache before training")
+        if is_main_process():
+            print("Cleared CUDA cache before training")
 
     # Resume from checkpoint if provided
     resume_from_checkpoint = args.resume_from_checkpoint
@@ -153,8 +214,9 @@ def main():
     optimizer_state_backup = None
     scheduler_backup = None
     if resume_from_checkpoint:
-        print(f"Resuming from checkpoint: {resume_from_checkpoint}")
-        print("Note: Optimizer state will be skipped to save memory for final steps")
+        if is_main_process():
+            print(f"Resuming from checkpoint: {resume_from_checkpoint}")
+            print("Note: Optimizer state will be skipped to save memory for final steps")
         
         # Temporarily move optimizer state files to skip loading them
         optimizer_file = os.path.join(resume_from_checkpoint, "optimizer.pt")
@@ -164,12 +226,14 @@ def main():
         if os.path.exists(optimizer_file):
             optimizer_state_backup = optimizer_file + ".backup"
             shutil.move(optimizer_file, optimizer_state_backup)
-            print(f"Moved optimizer state to {optimizer_state_backup} to save memory")
+            if is_main_process():
+                print(f"Moved optimizer state to {optimizer_state_backup} to save memory")
         
         if os.path.exists(scheduler_file):
             scheduler_backup = scheduler_file + ".backup"
             shutil.move(scheduler_file, scheduler_backup)
-            print(f"Moved scheduler state to {scheduler_backup} to save memory")
+            if is_main_process():
+                print(f"Moved scheduler state to {scheduler_backup} to save memory")
         
         # Clear cache before resuming
         if torch.cuda.is_available():
@@ -182,22 +246,26 @@ def main():
         if optimizer_state_backup and os.path.exists(optimizer_state_backup):
             original_file = optimizer_state_backup.replace(".backup", "")
             shutil.move(optimizer_state_backup, original_file)
-            print(f"Restored optimizer state file after error: {original_file}")
+            if is_main_process():
+                print(f"Restored optimizer state file after error: {original_file}")
         if scheduler_backup and os.path.exists(scheduler_backup):
             original_file = scheduler_backup.replace(".backup", "")
             shutil.move(scheduler_backup, original_file)
-            print(f"Restored scheduler state file after error: {original_file}")
+            if is_main_process():
+                print(f"Restored scheduler state file after error: {original_file}")
         raise e
     
     # Restore optimizer state files after training (for future reference)
     if optimizer_state_backup and os.path.exists(optimizer_state_backup):
         original_file = optimizer_state_backup.replace(".backup", "")
         shutil.move(optimizer_state_backup, original_file)
-        print(f"Restored optimizer state file: {original_file}")
+        if is_main_process():
+            print(f"Restored optimizer state file: {original_file}")
     if scheduler_backup and os.path.exists(scheduler_backup):
         original_file = scheduler_backup.replace(".backup", "")
         shutil.move(scheduler_backup, original_file)
-        print(f"Restored scheduler state file: {original_file}")
+        if is_main_process():
+            print(f"Restored scheduler state file: {original_file}")
 
 if __name__ == "__main__":
     main()
