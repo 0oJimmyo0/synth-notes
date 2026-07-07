@@ -86,12 +86,14 @@ run_shard () {
     --candidate_near_duplicate_cosine "${CANDIDATE_NEAR_DUPLICATE_COSINE:-0.995}" \
     --anchor_diversity_cosine "${ANCHOR_DIVERSITY_COSINE:-0.992}" \
     --manual_review_sample_size "${MANUAL_REVIEW_SAMPLE_SIZE:-50}" \
+    --max_train_texts_for_overlap "${MAX_TRAIN_TEXTS_FOR_OVERLAP:-50000}" \
     --selection_strategy "${SELECTION_STRATEGY:-best_target_score}" \
     --shard_id "${shard_id}" \
     --num_shards "${NUM_SHARDS}" \
     ${TARGET_BASIN_PATH:+--target_basin_path "${TARGET_BASIN_PATH}"} \
     ${TARGET_CENTROID_PATH:+--target_centroid_path "${TARGET_CENTROID_PATH}"} \
     ${TRAIN_TEXT_PATH:+--train_text_path "${TRAIN_TEXT_PATH}"} \
+    ${PICKLE_DIR:+--pickle_dir "${PICKLE_DIR}"} \
     ${JOIN_COLS:+--join_cols "${JOIN_COLS}"} &
   PIDS+=($!)
 }

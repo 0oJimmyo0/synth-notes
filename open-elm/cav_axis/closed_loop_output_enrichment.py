@@ -20,6 +20,7 @@ import hashlib
 import json
 import math
 import os
+import pickle
 import platform
 import random
 import re
@@ -54,6 +55,14 @@ from decoder_feasibility_audit import (  # noqa: E402
     parse_int_list,
 )
 
+MIMIC_MM_PATH = "/gpfs/radev/pi/xu_hua/shared/synthnote/physionet.org/files/MIMIC-MM-Dataset-main"
+if MIMIC_MM_PATH not in sys.path:
+    sys.path.insert(0, MIMIC_MM_PATH)
+try:
+    import minimal_API  # noqa: F401
+except Exception:
+    minimal_API = None
+
 
 PHI_PATTERNS = {
     "ssn_like": r"\b\d{3}-\d{2}-\d{4}\b",
@@ -61,6 +70,18 @@ PHI_PATTERNS = {
     "email_like": r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b",
     "mrn_like": r"\b(?:MRN|Medical Record Number)[:\s#-]*\d{5,}\b",
     "id_like": r"\b(?:ID|Acct|Account)[:\s#-]*\d{5,}\b",
+}
+
+STRUCTURE_SECTION_GROUPS = {
+    "chief_complaint": ["Chief Complaint:"],
+    "history_present_illness": ["History of Present Illness:"],
+    "past_medical_history": ["Past Medical History:"],
+    "pertinent_results": ["Pertinent Results:"],
+    "brief_hospital_course": ["Brief Hospital Course:"],
+    "discharge_diagnosis": ["Discharge Diagnosis:", "Discharge Diagnoses:"],
+    "discharge_condition": ["Discharge Condition:"],
+    "discharge_instructions": ["Discharge Instructions:", "Followup Instructions:", "Follow-up Instructions:"],
+    "discharge_medications": ["Discharge Medications:", "Medications on Discharge:", "Discharge Medication:"],
 }
 
 
@@ -118,6 +139,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--min_word_count", type=int, default=100)
     parser.add_argument("--min_source_cosine", type=float, default=0.78)
     parser.add_argument(
+        "--min_required_section_groups",
+        type=int,
+        default=6,
+        help="Minimum number of core discharge-summary section groups required to pass the clinical quality gate",
+    )
+    parser.add_argument(
+        "--disable_clinical_quality_gate",
+        action="store_true",
+        help="Disable truncation/structure/clinical-sanity gating if you need the older permissive behavior",
+    )
+    parser.add_argument(
         "--target_centroid_distance_threshold",
         type=float,
         default=None,
@@ -153,6 +185,11 @@ def parse_args() -> argparse.Namespace:
         help="Optional CSV/JSONL/Parquet/Pickle table with training-note text for overlap screening",
     )
     parser.add_argument(
+        "--pickle_dir",
+        default=None,
+        help="Optional explicit path to pickle_ds_note_hadm_all for train-text overlap screening",
+    )
+    parser.add_argument(
         "--max_train_texts_for_overlap",
         type=int,
         default=50000,
@@ -171,6 +208,66 @@ def parse_args() -> argparse.Namespace:
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def infer_base_dir(dataset_path: Path) -> Path | None:
+    for parent in dataset_path.resolve().parents:
+        if parent.name == "3.1":
+            return parent
+    return None
+
+
+def infer_pickle_dir(
+    dataset_path: Path,
+    source_dataset_path: Path | None = None,
+    explicit_pickle_dir: Path | None = None,
+) -> Path | None:
+    if explicit_pickle_dir is not None:
+        return explicit_pickle_dir if explicit_pickle_dir.exists() else None
+    base_dir = infer_base_dir(source_dataset_path or dataset_path)
+    if base_dir is None:
+        return None
+    candidate = base_dir / "pickle_ds_note_hadm_all"
+    return candidate if candidate.exists() else None
+
+
+def load_split_manifest_local(path: Path) -> pd.DataFrame:
+    df = pd.read_csv(path)
+    if "dataset_row_id" in df.columns:
+        df["dataset_row_id"] = pd.to_numeric(df["dataset_row_id"], errors="raise").astype(int)
+    return df
+
+
+def load_note_texts_for_rows(rows_df: pd.DataFrame, pickle_dir: Path) -> dict[int, str]:
+    needed_by_file: dict[str, dict[str, int]] = defaultdict(dict)
+    for _, row in rows_df.iterrows():
+        filename = row.get("filename")
+        note_id = row.get("note_id")
+        dataset_row_id = row.get("dataset_row_id")
+        if pd.isna(filename) or pd.isna(note_id) or pd.isna(dataset_row_id):
+            continue
+        needed_by_file[str(filename)][str(note_id)] = int(dataset_row_id)
+
+    dataset_row_to_text: dict[int, str] = {}
+    for filename, note_map in needed_by_file.items():
+        file_path = pickle_dir / filename
+        if not file_path.exists():
+            continue
+        try:
+            with file_path.open("rb") as handle:
+                patient_obj = pickle.load(handle)
+        except Exception:
+            continue
+
+        dsnotes = getattr(patient_obj, "dsnotes", None)
+        if dsnotes is None or getattr(dsnotes, "empty", True):
+            continue
+        for _, note_row in dsnotes.iterrows():
+            note_id = str(note_row.get("note_id", ""))
+            if note_id not in note_map:
+                continue
+            dataset_row_to_text[note_map[note_id]] = str(note_row.get("text", "")).strip()
+    return dataset_row_to_text
 
 
 def get_git_commit(script_dir: Path) -> str | None:
@@ -239,6 +336,73 @@ def normalize_text(text: str) -> str:
 
 def text_hash(text: str) -> str:
     return hashlib.sha256(normalize_text(text).encode("utf-8")).hexdigest()
+
+
+def detect_truncation(text: str) -> tuple[bool, str]:
+    stripped = str(text).strip()
+    if not stripped:
+        return False, ""
+    lines = [line.strip() for line in stripped.splitlines() if line.strip()]
+    if not lines:
+        return False, ""
+    last_line = lines[-1]
+    lower_tail = stripped[-120:].lower()
+
+    if re.search(r"\b(of|and|or|with|without|for|to|the|a|an|due|from|in)\s*$", lower_tail):
+        return True, "terminal_fragment"
+    if re.search(r"[A-Za-z0-9]$", last_line) and not re.search(r"[.!?]\s*$", last_line):
+        if len(last_line) <= 40:
+            return True, "unterminated_short_last_line"
+        if len(stripped.split()) >= 150:
+            return True, "unterminated_last_line"
+    if re.search(r"^\d+\.\s+[A-Za-z][A-Za-z0-9/ -]{0,20}$", last_line):
+        return True, "truncated_list_item"
+    return False, ""
+
+
+def structure_group_flags(text: str) -> dict[str, bool]:
+    lowered = str(text).lower()
+    out: dict[str, bool] = {}
+    for group, headers in STRUCTURE_SECTION_GROUPS.items():
+        out[group] = any(header.lower() in lowered for header in headers)
+    return out
+
+
+def clinical_sanity_flags(text: str) -> dict[str, bool]:
+    txt = str(text)
+    lowered = txt.lower()
+
+    spo2_over_100 = bool(re.search(r"\b(?:SpO2|SaO2|O2 sat(?:uration)?)\s*[:=\-]?\s*(10[1-9]|1[1-9]\d|\d{3,})\s*%?", txt, flags=re.IGNORECASE))
+    sao2_implausibly_low = False
+    for match in re.finditer(r"\b(?:SaO2|SpO2|O2 sat(?:uration)?)\s*[:=\-]?\s*(\d{1,3})\s*%?\s*(?:RA|room air)\b", txt, flags=re.IGNORECASE):
+        try:
+            value = int(match.group(1))
+        except Exception:
+            continue
+        if value < 50:
+            sao2_implausibly_low = True
+            break
+
+    potassium_implausible = False
+    for match in re.finditer(r"\b(?:K\+?|potassium)\s*[:=\-]?\s*(\d+(?:\.\d+)?)\b", txt, flags=re.IGNORECASE):
+        try:
+            value = float(match.group(1))
+        except Exception:
+            continue
+        if value > 8.0 or value < 1.5:
+            potassium_implausible = True
+            break
+
+    malformed_repeated_token = bool(re.search(r"\b([A-Za-z]{1,3})\s+\1\s+\1\b", txt))
+    nonsense_phrase = ("antacids to prevent poisoning" in lowered) or ("viral coverage antibiotic" in lowered)
+
+    return {
+        "spo2_over_100_flag": spo2_over_100,
+        "sao2_implausibly_low_on_room_air_flag": sao2_implausibly_low,
+        "potassium_implausible_flag": potassium_implausible,
+        "malformed_repeated_token_flag": malformed_repeated_token,
+        "nonsense_phrase_flag": nonsense_phrase,
+    }
 
 
 def resolve_embedding_device(requested_device: str) -> str:
@@ -364,6 +528,46 @@ def maybe_load_train_texts(path: Path | None, cap: int) -> tuple[list[str], str 
     if cap and len(texts) > cap:
         texts = texts[:cap]
         return texts, f"loaded_first_{cap}_train_texts_only"
+    return texts, None
+
+
+def maybe_load_train_texts_from_pickle(
+    split_manifest_path: Path | None,
+    pickle_dir: Path | None,
+    cap: int,
+) -> tuple[list[str], str | None]:
+    if split_manifest_path is None:
+        return [], "split_manifest_path_not_provided_for_pickle_train_text_screen"
+    if pickle_dir is None:
+        return [], "pickle_dir_not_provided_or_not_found_for_train_text_screen"
+
+    split_df = load_split_manifest_local(split_manifest_path)
+    if "split" not in split_df.columns:
+        return [], "split_manifest_missing_split_column"
+
+    train_rows = split_df.loc[split_df["split"].astype(str) == "train"].copy()
+    required_cols = {"dataset_row_id", "filename", "note_id"}
+    missing = sorted(required_cols - set(train_rows.columns))
+    if missing:
+        return [], f"split_manifest_missing_columns:{','.join(missing)}"
+
+    train_rows = train_rows.sort_values("dataset_row_id").reset_index(drop=True)
+    truncated = False
+    if cap and len(train_rows) > cap:
+        train_rows = train_rows.head(cap).copy()
+        truncated = True
+
+    text_map = load_note_texts_for_rows(train_rows, pickle_dir)
+    texts = []
+    for row_id in train_rows["dataset_row_id"].tolist():
+        text = normalize_text(str(text_map.get(int(row_id), "")))
+        if text:
+            texts.append(text)
+
+    if not texts:
+        return [], "no_train_texts_loaded_from_pickle_source"
+    if truncated:
+        return texts, f"loaded_first_{cap}_train_texts_only_from_pickle_source"
     return texts, None
 
 
@@ -530,6 +734,12 @@ def markdown_summary(summary: dict[str, Any]) -> str:
         f"- Rejected mean source cosine: `{summary['rejected_mean_source_cosine']:.4f}`",
         "",
         "## Privacy / Quality",
+        f"- Accepted truncation rate: `{summary['accepted_truncation_rate']:.4f}`",
+        f"- Rejected truncation rate: `{summary['rejected_truncation_rate']:.4f}`",
+        f"- Accepted structure-pass rate: `{summary['accepted_structure_pass_rate']:.4f}`",
+        f"- Rejected structure-pass rate: `{summary['rejected_structure_pass_rate']:.4f}`",
+        f"- Accepted clinical-sanity warning rate: `{summary['accepted_clinical_sanity_rate']:.4f}`",
+        f"- Rejected clinical-sanity warning rate: `{summary['rejected_clinical_sanity_rate']:.4f}`",
         f"- Accepted collapse rate: `{summary['accepted_collapse_rate']:.4f}`",
         f"- Rejected collapse rate: `{summary['rejected_collapse_rate']:.4f}`",
         f"- Accepted PHI-warning rate: `{summary['accepted_phi_warning_rate']:.4f}`",
@@ -558,6 +768,7 @@ def main() -> None:
     target_basin_path = Path(args.target_basin_path).resolve() if args.target_basin_path else None
     target_centroid_path = Path(args.target_centroid_path).resolve() if args.target_centroid_path else None
     train_text_path = Path(args.train_text_path).resolve() if args.train_text_path else None
+    explicit_pickle_dir = Path(args.pickle_dir).resolve() if args.pickle_dir else None
 
     preferred_join_cols = parse_csv_list(args.join_cols)
     target_cluster_ids = infer_target_cluster_ids(parse_int_list(args.target_cluster_ids), target_basin_path)
@@ -605,6 +816,17 @@ def main() -> None:
     cluster_centroid_ids = np.asarray(sorted(cluster_centroids), dtype=int)
 
     train_texts, train_text_warning = maybe_load_train_texts(train_text_path, int(args.max_train_texts_for_overlap))
+    if not train_texts:
+        resolved_pickle_dir = infer_pickle_dir(
+            dataset_path=dataset_path,
+            source_dataset_path=None,
+            explicit_pickle_dir=explicit_pickle_dir,
+        )
+        train_texts, train_text_warning = maybe_load_train_texts_from_pickle(
+            split_manifest_path=split_manifest_path,
+            pickle_dir=resolved_pickle_dir,
+            cap=int(args.max_train_texts_for_overlap),
+        )
     train_text_hashes, train_ngrams = build_train_overlap_reference(train_texts) if train_texts else (set(), set())
 
     model, model_meta = load_generation_model(args.checkpoint_path, args.device)
@@ -660,6 +882,12 @@ def main() -> None:
             qflags = quality_flags(note)
             phi_map = phi_flags(note)
             phi_warning = any(phi_map.values())
+            truncation_flag, truncation_reason = detect_truncation(note)
+            section_flags = structure_group_flags(note)
+            section_count = int(sum(section_flags.values()))
+            missing_groups = [name for name, present in section_flags.items() if not present]
+            sanity_flags = clinical_sanity_flags(note)
+            clinical_sanity_flag = any(sanity_flags.values())
             candidate_rows.append(
                 {
                     "candidate_id": candidate_id,
@@ -688,6 +916,13 @@ def main() -> None:
                     "generated_text": note,
                     "text_hash": text_hash(note),
                     **qflags,
+                    "truncation_flag": bool(truncation_flag),
+                    "truncation_reason": truncation_reason,
+                    "required_section_group_count": section_count,
+                    "missing_required_section_groups": "|".join(missing_groups),
+                    **{f"section_{key}_present": value for key, value in section_flags.items()},
+                    **sanity_flags,
+                    "clinical_sanity_flag": clinical_sanity_flag,
                     **{f"phi_{key}": value for key, value in phi_map.items()},
                     "phi_warning_flag": phi_warning,
                 }
@@ -748,6 +983,15 @@ def main() -> None:
         candidate_df["high_ngram_overlap_with_train_flag"] = False
         candidate_df["high_ngram_overlap_with_train_ratio"] = math.nan
 
+    candidate_df["structure_pass"] = candidate_df["required_section_group_count"] >= int(args.min_required_section_groups)
+    candidate_df["clinical_quality_pass"] = (
+        (~candidate_df["truncation_flag"])
+        & candidate_df["structure_pass"]
+        & (~candidate_df["clinical_sanity_flag"])
+    )
+    if args.disable_clinical_quality_gate:
+        candidate_df["clinical_quality_pass"] = True
+
     candidate_df["basic_quality_pass"] = (
         (~candidate_df["empty_output_flag"])
         & (~candidate_df["too_short_flag"])
@@ -761,6 +1005,7 @@ def main() -> None:
     )
     candidate_df["preliminary_accept"] = (
         candidate_df["basic_quality_pass"]
+        & candidate_df["clinical_quality_pass"]
         & candidate_df["source_cosine_pass"]
         & candidate_df["privacy_pass"]
         & candidate_df["target_gate_pass"]
@@ -776,6 +1021,22 @@ def main() -> None:
                 reasons.append("too_short")
             if bool(row["repetition_or_collapse_flag"]):
                 reasons.append("repetition_or_collapse")
+        if not bool(row["clinical_quality_pass"]):
+            if bool(row["truncation_flag"]):
+                reasons.append(f"truncation:{row['truncation_reason']}" if row["truncation_reason"] else "truncation")
+            if not bool(row["structure_pass"]):
+                reasons.append("missing_core_sections")
+            if bool(row["clinical_sanity_flag"]):
+                if bool(row.get("spo2_over_100_flag", False)):
+                    reasons.append("spo2_over_100")
+                if bool(row.get("sao2_implausibly_low_on_room_air_flag", False)):
+                    reasons.append("sao2_implausibly_low_on_room_air")
+                if bool(row.get("potassium_implausible_flag", False)):
+                    reasons.append("potassium_implausible")
+                if bool(row.get("malformed_repeated_token_flag", False)):
+                    reasons.append("malformed_repeated_token")
+                if bool(row.get("nonsense_phrase_flag", False)):
+                    reasons.append("nonsense_phrase")
         if not bool(row["source_cosine_pass"]):
             reasons.append("low_source_cosine")
         if not bool(row["privacy_pass"]):
@@ -865,6 +1126,9 @@ def main() -> None:
         "nearest_cluster_in_target",
         "patient_disjoint_from_train",
         "generated_word_count",
+        "required_section_group_count",
+        "truncation_flag",
+        "clinical_sanity_flag",
         "repetition_or_collapse_flag",
         "phi_warning_flag",
         "rejection_reasons",
@@ -1004,10 +1268,18 @@ def main() -> None:
         "accepted_centroid_distance_pass_rate": float(accepted_df["target_centroid_distance_pass"].mean()) if len(accepted_df) else math.nan,
         "accepted_mean_source_cosine": float(accepted_df["source_synthetic_cosine"].mean()) if len(accepted_df) else math.nan,
         "rejected_mean_source_cosine": float(rejected_df["source_synthetic_cosine"].mean()) if len(rejected_df) else math.nan,
+        "accepted_truncation_rate": group_flag_rate(accepted_df, "truncation_flag"),
+        "rejected_truncation_rate": group_flag_rate(rejected_df, "truncation_flag"),
+        "accepted_structure_pass_rate": float(accepted_df["structure_pass"].mean()) if len(accepted_df) else math.nan,
+        "rejected_structure_pass_rate": float(rejected_df["structure_pass"].mean()) if len(rejected_df) else math.nan,
+        "accepted_clinical_sanity_rate": group_flag_rate(accepted_df, "clinical_sanity_flag"),
+        "rejected_clinical_sanity_rate": group_flag_rate(rejected_df, "clinical_sanity_flag"),
         "accepted_collapse_rate": group_flag_rate(accepted_df, "repetition_or_collapse_flag"),
         "rejected_collapse_rate": group_flag_rate(rejected_df, "repetition_or_collapse_flag"),
         "accepted_phi_warning_rate": group_flag_rate(accepted_df, "phi_warning_flag"),
         "rejected_phi_warning_rate": group_flag_rate(rejected_df, "phi_warning_flag"),
+        "min_required_section_groups": int(args.min_required_section_groups),
+        "clinical_quality_gate_enabled": not bool(args.disable_clinical_quality_gate),
         "train_overlap_screen_status": "loaded" if train_texts and not train_text_warning else (train_text_warning or "skipped"),
         "privacy_warning_rates": {
             "accepted_exact_duplicate_vs_train_rate": group_flag_rate(accepted_df, "exact_duplicate_vs_train_flag"),
