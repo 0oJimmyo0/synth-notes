@@ -100,8 +100,21 @@ def pairwise_cosine_similarity(a, b):
     cosine_sim = dot_products / norm_product
     return cosine_sim.tolist()
 
-def batch_inference(model, tokenizer, embeddings, device, task="abstract", repetition_penalty=1.0,
-                    temperature=None, top_p=None, top_k=None, max_new_tokens=1024, do_sample=False):
+def batch_inference(
+    model,
+    tokenizer,
+    embeddings,
+    device,
+    task="abstract",
+    repetition_penalty=1.0,
+    temperature=None,
+    top_p=None,
+    top_k=None,
+    max_new_tokens=1024,
+    min_new_tokens=None,
+    do_sample=False,
+    clinic_note_prompt_mode="default",
+):
     """
     Run inference in batch mode.
     
@@ -116,7 +129,9 @@ def batch_inference(model, tokenizer, embeddings, device, task="abstract", repet
         top_p: Nucleus sampling parameter (None = disabled)
         top_k: Top-k sampling parameter (None = disabled)
         max_new_tokens: Maximum number of new tokens to generate (default: 1024)
+        min_new_tokens: Minimum number of new tokens to generate before EOS can stop decoding
         do_sample: Whether to use sampling (default: False, uses greedy if False)
+        clinic_note_prompt_mode: Prompt style for clinic-note generation
                 
     Returns:
         List of generated outputs
@@ -156,9 +171,23 @@ def batch_inference(model, tokenizer, embeddings, device, task="abstract", repet
                 {"role": "user", "content": "Please write a plain language summary of the abstract <|reserved_special_token_0|>"},
             ]
         elif task == "clinic_note":
-            chat = [
-                {"role": "user", "content": "Provide the text of the clinic note <|reserved_special_token_0|>"},
-            ]
+            if clinic_note_prompt_mode == "discharge_structured":
+                chat = [
+                    {
+                        "role": "user",
+                        "content": (
+                            "Provide the full discharge summary clinic note for <|reserved_special_token_0|>. "
+                            "Complete the note in coherent discharge-summary form and include, when clinically appropriate: "
+                            "Chief Complaint, History of Present Illness, Past Medical History, Pertinent Results, "
+                            "Brief Hospital Course, Discharge Diagnosis, Discharge Condition, Discharge Instructions or Followup Instructions, "
+                            "and Discharge Medications. Do not stop mid-section, mid-list, or mid-sentence."
+                        ),
+                    },
+                ]
+            else:
+                chat = [
+                    {"role": "user", "content": "Provide the text of the clinic note <|reserved_special_token_0|>"},
+                ]
             
         input_ids = tokenizer.apply_chat_template(chat, return_tensors='pt', add_generation_prompt=True).to(device)
         input_ids_list.append(input_ids)
@@ -209,6 +238,8 @@ def batch_inference(model, tokenizer, embeddings, device, task="abstract", repet
         "pad_token_id": tokenizer.eos_token_id,
         "repetition_penalty": repetition_penalty,
     }
+    if min_new_tokens is not None:
+        generation_kwargs["min_new_tokens"] = int(min_new_tokens)
     
     # Add sampling parameters if provided
     if do_sample or temperature is not None or top_p is not None or top_k is not None:

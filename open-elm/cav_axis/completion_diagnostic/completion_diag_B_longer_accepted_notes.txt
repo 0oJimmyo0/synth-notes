@@ -1,0 +1,691 @@
+===== NOTE 1 | anchor_000010_cand00 =====
+anchor_id: anchor_000010
+dataset_row_id: 11042
+note_id: 10695410-DS-15
+subject_id: 10695410
+hadm_id: 22535104
+nearest_cluster_id: 9
+source_synthetic_cosine: 0.8319776058
+target_centroid_cosine: 0.9234556556
+generated_word_count: 1589
+
+Name:  ___                   Unit No:   ___
+ 
+Admission Date:  ___              Discharge Date:   ___
+ 
+Date of Birth:  ___             Sex:   F
+ 
+Service: MEDICINE
+ 
+Allergies: 
+Sulfa (Sulfonamide Antibiotics) / Erythromycin Base
+ 
+Attending: ___.
+ 
+Chief Complaint:
+Dyspnea, fever chills
+ 
+Major Surgical or Invasive Procedure:
+None
+
+ 
+History of Present Illness:
+___ with a PMH of HTN, DM2 on Insulin who presented to OSH for 
+shortness of breath. Patient has been feeling generally unwell 
+for several days prior and today experienced fevers up to 102.5F 
+and shakes. She reports having felt like she is "getting worse" 
+since her last visit at ___. During that admission in ___ 
+she was admitted from home for LRTI requiring oxygen therapy. At 
+that time there were no focal findings and CXR showed small opacities consistent with bronchitis vs possible early pneumonia. 
+
+She was discharged after starting azithro which she completed but did not feel well afterwards. Pt then went back out to be evaluated by Dr. ___ provider during which time pt reported difficulty breathing while walking short distances and overall low energy. Labs were checked including WBC 7.6 w/ normal differential. A UA showing moderate leukuria, nitrites negative and mild proteinuria and urine culture grew gram positive cocci. CT chest revealed bilateral pleural effusions. After seeing Dr. ___ patient was given outpatient IVIG 40mg/kg over two hours.  
+On ED arrival she denies any SOB despite using ambu bag on 
+ambulance.
+
+Pt feels somewhat better now since receiving fluids so far this 
+morning. Pt admits some dysphagia to solids currently and has had 
+difficulty sleeping recently due to discomfort and bad dreams.  
+
+ROS: Pertinent positives and negatives as noted in the HPI. All 
+other systems were reviewed and are negative. 
+ 
+Past Medical History:
+- diabetes mellitus type II  
+- hypertension  
+- obesity   
+- depression
+  
+PSHx: None known to pt
+   
+Social History:
+Cigarette smoking history >20 years with heavy pack per day use. 
+No other tobacco products. Quit in ___ year ago. Alcohol drinks 
+occasionally when out socially. Does drink coffee regularly. Not 
+exposed to asbestos professionally. Lives alone and does have a 
+pet cat. Last vaccination flu shot in ___  
+ 
+Physical Exam:
+VS: T=98 BP=123/87 P=77 RR=18 O2 sat =95% RA  
+GENERAL - NAD, pleasant female talking easily about herself  
+HEENT - AT/NC, anicteric sclerae, pink conjunctiva, MMM, perturbable dentition  
+NECK - supple, trachea midline, JVP <9 cm  
+CARDIAC - RRR, S1/S2 clear and without murmurs/rubs/gallops  
+LUNGS - CTA bilaterally, resp unlabored, no accessory muscle use  
+
+ABDOMEN - nondistended, nontender in all quadrants, no rebound 
+or guarding, no hepatosplenomegaly  
+EXTREMITIES - no edema, 2+ pulses radial and DP  
+SKIN - warm and dry, no rashes  
+NEUROLOGICAL - awake, alert, oriented x 3, CNs II-XII intact, 
+motor function grossly normal  
+
+Discharge physical exam notable for HR between 64-84 throughout 
+admission, stable vitals otherwise, mildly elevated blood sugar 
+requiring adjustments only once throughout hospitalization, mild 
+diplopia upon lateral gaze limited to 45 degrees initially 
+without progression or improvement.
+
+ 
+Pertinent Results:
+___ 12:15AM BLOOD WBC-8.0# RBC-4.24* Hgb-10.3* Hct-32.1* 
+MCV-76* MCH-24.2* MCHC-31.9 RDW-14.8 Plt ___
+___ 06:25PM BLOOD Neuts-79.5* Lymphs-11.6* Monos-7.6 
+Eos-0.4 Baso-0.4 Im ___ AbsNeut-4.81 AbsLymp-0.65* 
+AbsMono-0.43 AbsEos-0.02* AbsBaso-0.01
+___ 04:50PM URINE Color-Yellow Appear-Hazy Sp ___
+___ 04:00PM URINE Blood-LG Nitrite-NEG Protein-MOD 
+Glucose-300 Ketone-NEG Bilirub-NORMAL Urobiln-3* pH-6.0 Leuks-RARE
+___ 04:00PM URINE RBC->182* WBC-19* Bacteri-FEW Yeast-NONE 
+Epi-<1 TransE-<1
+___ 09:05PM URINE Hours-RANDOM Creat-63 TotProt-109 Alb-71 
+CreatCl-101 Sodium-44 Potas-s125 Chloride-90
+___ 07:30PM URINE bnzodzp-POS barbitr-POS opiates-POS 
+cocaine-NEG amphetm-NEG oxycodn-POS mthdone-POS benzoila-NEG 
+barbit-NEG
+___ 03:38AM BLOOD Homogentis Glucosidase-GREATER THA
+___ 03:55PM URINE Blood-SM Moderate Nitrite-NEG Protein-200 
+Glucose-400 Ketone-TR Blk/Disc-TR Urobiln-TR Ph --- 
+Nitric-OID Pigment-TAN Red/Blood-TR
+___ 08:27PM URINE Hour-UAND TotProtein-PND Protein/P-Th 
+TotSolPb-PND SolPb/Creat-PND
+
+Microbiology:
+
+Urine Culture (Final ___:    <=100,000 CFU/mL. Candida albicans, 
+MODERATELY abundant yeast cells and/or hyphae observed. Growth 
+of bacteria sufficient for identification.
+     GRAM STAIN (Final ___: 
+      *COCA COLONIZERS OR OTHER NON PATHOGENIC ORGANISMS PRESENT 
+ORAbsent. 
+     URINE CULTURE (Final ___: NO GROWTH OF MICROORGANISMS 
+FOUND. 
+
+Blood cultures pending; urinalysis sent with results mentioned above.
+
+
+CT Chest ___: 
+IMPRESSION: 
+  
+Multiple chronic bibasilar pneumatoceles compatible with cystic  
+lung disease likely related to previous infections. Chronic  
+lower lobe consolidation more suggestive of organizing 
+consolidation versus fibrosis. Mild right apical opacity most 
+suggestive of scarring/fibrosis. Small left hilar lymph node.  
+Small volume bilateral lower lobe interstitial lucency 
+compatible with mild pulmonary edema.  
+
+Left paranasal sinus fluid level compatible with mucous retention. 
+
+ECGs performed on ___ show no changes compared to prior trace.
+    
+Cardiac enzymes performed on ___ reveal Troponin I below 0.005, CK total around 22, CRP at baseline.
+ 
+Brief Hospital Course:
+Ms. ___ is a ___ yo woman with past medical history significant 
+for HTN, DM2 s/p multiple admissions in recent months, 
+recurrent respiratory illness treated with antibiotics and one 
+course of Ig treatment presenting with acute onset LUTI and 
+hypoxemia.
+
+# Acute Respiratory Distress Syndrome (ARDS): Given clinical 
+presentation and evidence of new lung nodules, suspicion was made 
+for ARDS secondary to pulmonary embolism. Pt was placed on 
+non-invasive bi-pap. Initial CBC was within normal limits. 
+Patient's D-dimer returned slightly high at 240, however it was 
+not significantly abnormal considering pt's age and BMI. Pulmonary vasculature study (PVR) revealed very good compliance. Cardiac enzymes were also negative making MI less likely as etiology. Her troponins remained negative for remainder of course. Due to concerns for PE, patient received LMWH en route to MICU given suspected need for anticoagulation. Repeat VQ scan was planned if unable to wean off non invasive ventilation. Over next several days pt was able to gradually improve, tolerate upright position, and weaned successfully to room air. Additionally, imaging was obtained revealing extensive bibasilar emphysema without evidence of malignancy or active infection though large bullae were seen in both lungs concerning for spontaneous rupture later complicating course. Therefore, decision was made to place patient on long term heparin with goal INRs kept subtherapeutic in hopes to prevent thromboembolic events given patient's decreased mobility. However, given ongoing symptoms of fatigue and potential issues associated with anti-coagulation, patient will continue to followup with PCP on outpatient basis. Upon transfer to floor, she continued to improve tolerating diet, increasing activity levels, and demonstrated ability to breathe comfortably sitting up unsupported thus being cleared for discharge to rehabilitation center where further workups can take place. 
+
+**Given severe peripheral vascular compromise from poor circulation
+pt underwent leg Dopplers post-hospitalization demonstrating 
+patency across entire lower extremity vessels in preparation for 
+further management as outpatients.
+ 
+Medications on Admission:
+The Preadmission Medication list may be inaccurate and requires 
+futher investigation.
+1. Fluoxetine 60 mg PO QHS 
+2. Glyburide 2.5 mg oral BID 
+3. Lisinopril 20 mg PO daily 
+4. MetFORMIN XR (GLUCOPHAGE XL) 500 mg PO BID 
+5. Oxcarbazepine 600 mg PO BID 
+6. Rosuvastatin Calcium 10 mg PO QPM 
+7. Sertraline 75 mg PO HS 
+8. Simvastatin 20 mg PO DAILY 
+9. Aspirin 325 mg PO DAILY 
+10. Azelaic Acid Gel 15 % topical application qhs 
+11. Hydrocod-Aaps 2.5-315 mg-5 mL Oral Q4H:PRN pain 
+RX *hydrocodone-acetaminophen [Norco] 5 mg-325 mg 2 tablets(s) 
+PO every four (4) hours Disp #*28 Tablet Refills:*0
+12. Ibuprofen 800 mg PO Q8H:PRN Pain 
+13. Lidocaine Topical 5% cream applied topically qhr PRN pruritic 
+skin lesions 
+14. Multivitamins 1 TAB BY MO. 
+15. Senna 17 mg PO BID:PRN constipation 
+16. Zolpidem Tartrate 5 mg PO QSHP as needed for insomnia 
+RX *zolpidem tartrate [Ambien] 5 mg 1 tablet(s) by mouth at bedtime 
+Disp #*30 Tablet Refills:*0
+
+
+ 
+Discharge Medications:
+1. Fluoxetine 60 mg PO HS 
+2. Glyburide 2.5 mg oral BID 
+3. Hibiclens 4 % Solution Apply Topically QDA 
+Start 1 week before surgery to minimize risk of surgical site 
+infection. Also apply solution to hands after washing them. Do 
+NOT rinse off solution after applying. Continue after you go 
+home until end date listed above unless instructed otherwise by 
+your healthcare providers. 
+4. Hydrocodone-Acetaminophen (5 mg-325 mg) 1 CAP PO Q6H:PRN Pain 
+
+
+Continue taking prescription medication (hydrocodone/apap) as 
+prescribed by your primary care physician for managing pain at 
+the incision sites. This medication should only be taken as 
+directed by your health-care provider. If you experience any 
+unusual side effects such as confusion, seizures, excessive 
+sedation etc., please call the doctor immediately. You must get 
+refill prescriptions from either your original pharmacy or mail 
+order. 
+5. Lidocaine Topical 5% cream applied topically qhr PRN pruritic 
+skin lesions 
+Apply twice a day for 2 weeks before surgery. Use again one hour 
+prior to procedure, do NOT remove dressing after procedure, 
+apply frequently afterward as directed to promote healing of 
+wound. Start 1 week before surgery to minimize risk of surgical 
+site infection. Also apply solution to hands after washing them. 
+Do NOT rinse off solution after applying. CONTINUE AFTER YOU GO 
+HOME TO END DATE LISTED ABOVE UNLESS INSTRUCTED OTHERWISE BY YOUR 
+HEALTH CARE PROVIDERS. 
+6. Lipitor 10 mg PO QPM 
+7. Norco (Hydrocodone APAP) 5 mg-325 mg orally q4h prn pain 
+RX *hydromorphone-liquid [Dilaudid] 2 mg ___ mL PO Q3-4HR:PRN 
+pain Disp #*150 mL Refills:*1
+8. Multi-Vitamin 1 TAB BYMO 
+Take one multivitamin pill each morning. 
+9. Roxanol 5 mg PO Q4H:PRN Severe Breakthrough Pain 
+Rx ___, DOSING INSTRUCTIONS: Take 5 mg dose q3-4 hr prn breakthrough 
+pain.  Note: Avoid drinking alcohol when taking opioids (morphine). 
+Rx ___, DISPENSE 150 ML REFILLS:*2
+10. Simethicone 160 mg PO BID 
+For Gas And Flatulence 
+11. Sustained release Morphine (extended-release), Dosage Form 
+Tablets, USP 15 mg PO Q12H 
+Note: Please take with food to avoid nausea/vomiting. Rx ___, 
+DISPENSE 120 TABLETS REFILLS:*2
+12. Tylenol #3  One tablet every six (6) hours while awake prn 
+pain 
+Please take tylenol with acetominaphen separately rather than 
+mixing into hydrocodone formulations. 
+
+ 
+Follow-up Instructions:
+___
+
+===== NOTE 2 | anchor_000012_cand01 =====
+anchor_id: anchor_000012
+dataset_row_id: 23071
+note_id: 16730806-DS-18
+subject_id: 16730806
+hadm_id: 21022172
+nearest_cluster_id: 45
+source_synthetic_cosine: 0.814335227
+target_centroid_cosine: 0.9138638377
+generated_word_count: 1068
+
+Name:  ___                  Unit No:   ___
+ 
+Admission Date:  ___              Discharge Date:   ___
+ 
+Date of Birth:  ___             Sex:   M
+ 
+Service: SURGERY
+ 
+Allergies: 
+Patient recorded as having No Known Allergies to Drugs
+ 
+Attending: ___.
+ 
+Chief Complaint:
+abdominal pain and nausea 
+ 
+Major Surgical or Invasive Procedure:
+___ laparoscopic cholecystectomy with intraoperative ERCP 
+and sphincterotomy 
+
+ 
+History of Present Illness:
+Mr. ___, a ___ yo man, presented for elective admission in 
+preparation for outpatient surgical procedure.
+
+The patient has had chronic intermittent right upper quadrant 
+pain radiating into his back, associated with nausea. He states 
+that he first noticed symptoms over two years ago after eating 
+a heavy meal that included fried foods at a barbecue. The acute 
+episode occurred about one month ago when he experienced severe 
+right upper quadrant abdominal pain, which was accompanied by 
+nausea and vomiting; it resolved spontaneously within several 
+days without any specific treatment other than fluids. On many 
+occasions since then, however, Mr. ___ has noted mild-to-moderate 
+intermittent episodes of RQ discomfort lasting up to an hour.  
+He denies fever, weight loss, hematemesis, melena, jaundice, 
+chills, dysuria, frequency, urgency, diarrhea, constipation, or 
+other concerning systems. His abdomen is otherwise asymptomatic.
+
+Of historical significance, the patient reports that he has been 
+diagnosed with GERD since childhood and takes daily medication 
+for this problem (omeprazole). Additionally, he notes recurrent 
+episodes of epigastric burning/heartburn on occasion following 
+consumption of fatty meals but these are not associated with 
+symptoms like chest pressure. He also admits experiencing some 
+chronic diffuse musculoskeletal complaints including neck and 
+back pains although no recent worsening in either area is denied.
+
+
+In terms of medical history, Mr. ___ undergoes routine blood 
+tests every three months per recommendation from another 
+gastroenterologist due to suspicion of possible liver disease 
+based upon elevated AST levels during one prior set of lab tests 
+over five years past. Although he does have known risk factors 
+for alcoholism (he describes drinking a six-pack of beer each 
+night), there were no clinical indicators such as malnutrition, 
+edema, or tremors consistent with alcohol abuse syndrome in my 
+evaluation. There were findings suggesting long-standing 
+depression though he has not seen a psychiatrist for therapy. At 
+present time, he feels reasonably well physically excepting only 
+the aforementioned abdominal complaints.
+ 
+Past Medical History:
+# Gallbladder disease  
+
+# Alcohol dependence 
+# Chronic depression  
+
+# Obesity (BMI 32) 
+
+ # Hepatitis C - diagnosis made based on abnormal LFTs- 
+unfollowup done   
+ 
+Social History:
+___
+Family History:
+Father died age ___ heart attack; mother died age ___ stroke;
+brother deceased age ___ unknown cause; sister living; brother,
+living with diabetes mellitus type II, father alive with HTN;
+
+Psychosocial Assessment:
+
+This 34 year old gentleman presents for evaluation before planned 
+elective surgery for gallstones. This is a significant change in 
+his life style, considering the fact that he used to drink quite 
+regularly.
+
+At present time, he is unemployed due to health problems. The 
+family is supportive.
+ 
+Physical Exam:
+Upon discharge physical examination revealed
+Vitals: Tm99.2 BP101/P90 P83 RR16 O2sat92%RA
+Gen: Pleasant, comfortable appearing male lying supine
+CV: Regular rate and rhythm
+Pulm: Clear lung fields bilaterally
+Abd: Soft, distended
+Extremities: Warm, well-perfused
+ 
+Pertinent Results:
+CT ABDOMEN W/O CONTRAST STUDIED ON ___
+IMPRESSION:  
+1. Slight prominence of common hepatic duct consistent with 
+choledocholithiasis versus post-traumatic mural thickening. No 
+evidence of bile duct obstruction or dilatation. 
+2. Diffusely increased duodenal wall thickness measuring upto 13mm. 
+Possible underlying inflammatory process or neoplastic lesion vs. 
+post-traumatic changes given lack of focal stricture. Evaluate if 
+clinically indicated. 
+3. Small amount of periportal fat around the IVC. Otherwise no 
+enlargement of retroperitoneal lymph nodes and normal size 
+liver. 
+
+LABS AT TIME OF DISCHARGE:
+WBC:11.8* Hgb:12.0 Plt Ct:180
+
+Glucose-Urea-Creatinine-Albumin-GOT-GPT-TBili-DBil-Lipase-Alk 
+PhoS-Potassium-Sodium-Chloride-Bicarb-Acidity-Cal-Bilirubin 
+TotalCholesterol-HDL Chol-Triglycerides HDL/Ldl VLDL Lipid 
+Profile:
+___.7 mg/dL - <35 U/l *5.6 g/dL - _._ lU/ml - _._ mg/dL - 
+_._ IU/mL - _.*mg/dL - 108 mEq/L - 121 mmol/L - 120 mmol/L - --- 
+
+CHEMISTRIES:
+Na+106 K+4 Mg++1 Ca**+1 Phos--- Alkalinity---
+TIBC Iron Ferritin Glucreatin Vit D25OH Folate B12 
+Erythropoietin Free PSA Prostate CA PSA (total)
+9.7 mg/dL ___ % ___ ng/mL
+___.24 mg/dL -- Normal ___ ug/L
+Normal <10ug/L
+< 4 ng/mL
+-- >100ng/mL -- <4 pg/ml
+ 
+Brief Hospital Course:
+On ___ the patient underwent uneventful open approach for 
+laproscopic cholecyctomy w/ERCP &amp; sphicterotomy.
+
+Discharged home feeling much better and more energetic
+ 
+Medications on Admission:
+Citalopram 20 mg qAM 
+Aspirin 81 mg daily 
+Aciphex 40 mg daily 
+Oxycodone prn for breakthrough pain
+
+ 
+Discharge Medications:
+1. Aspirin 325 mg Tablet Sig: One (1) Tablet PO DAILY (Daily).
+Disp:*60 Tablet(s)* Refills:*2*
+2. Aciphex 40 mg Capsule Sig: Two (2) Capsules PO QPM (once a 
+day at bedtime).
+Disp:*30 Capsule(s)* Refills:*2*
+
+ 
+Discharge Disposition:
+Home
+ 
+Discharge Diagnosis:
+Gall stones with pancreas inflammation
+
+ 
+Discharge Condition:
+Stable
+
+ 
+Discharge Instructions:
+Please call your doctor or return to the emergency room if you 
+are concerned about your condition.
+
+Also please follow-up with Dr. ___ in ___ weeks for check-in.
+
+Incision care instructions:
+For healing of skin incisions, keep them clean, dry and covered 
+with antibiotic ointment and band aid.
+Avoid getting wet until instructed so to do so.
+You may shower starting ____ hours post-op using warm water and 
+gentle soap. Pat areas dry instead of rubbing, avoiding direct 
+contact between towel and wound site while drying off.
+A small amount of bloody fluid in incision area should resolve 
+within a few days. If it persists beyond three days, contact our 
+office for further advice.
+It's okay to bathe as desired in case of itching sensation along 
+incision site. Any redness or swelling can be treated with ice to 
+area for 15 minutes each application throughout day. Apply cold 
+pack wrapped in towel to avoid frostbite. Contact office if 
+problems persist or worsens over next week.
+
+Do not smoke! Smoking will delay your recovery and may require 
+reoperation. Stop smoking now!
+
+No strenuous activity, lifting greater than 10 pounds, driving 
+until advised, excessive bending or stretching for eight weeks. 
+
+
+If you experience persistent dizziness, faintness, fatigue, 
+weakness, lethargy, shortness of breath or wheezing, please seek 
+medical attention immediately.
+
+
+
+Your bowel function and continence should resume to pre-operative 
+status. Please maintain regular dietary habits. Eat normally and 
+do not take anything orally unless ordered by your physician. Do 
+not eat nothing by mouth unless told to do so by your surgeon.
+
+It is very important that you adhere strictly to what is recommended here because failure to comply could lead to serious complications.
+ 
+Followup Instructions:
+___
+
+===== NOTE 3 | anchor_000015_cand03 =====
+anchor_id: anchor_000015
+dataset_row_id: 15011
+note_id: 10504711-DS-13
+subject_id: 10504711
+hadm_id: 21340106
+nearest_cluster_id: 33
+source_synthetic_cosine: 0.8448182344
+target_centroid_cosine: 0.8925960660000001
+generated_word_count: 1421
+
+Name:  ___              Unit No:   ___
+ 
+Admission Date:  ___              Discharge Date:   ___
+ 
+Date of Birth:  ___             Sex:   M
+ 
+Service: MEDICINE
+ 
+Allergies: 
+No Known Allergies / Adverse Drug Reactions
+ 
+Attending: ___.
+ 
+Chief Complaint:
+Lethargy, confusion 
+ 
+Major Surgical or Invasive Procedure:
+none 
+
+ 
+History of Present Illness:
+___ with a h/o HTN and HLD who was brought to the ED after being 
+found down at his apartment by his daughter. She reported that 
+he has been lethargic for over two weeks but did not lose 
+consciousness until today. He denied any chest pain or shortness 
+of breath during this time.
+
+In the field he received Narcan (naloxone) twice before coming in 
+to ___, where his initial vitals were T97 HR60 BP170/90 RR18 O2sat100%. On arrival to the ED, patient was found to be confused 
+and disoriented. His mental status improved on IV fluids and 
+Demerol, and he became more alert and oriented x1 prior to 
+transfer from ICU to Medicine floor. Vitals at transfer were 
+stable; labs notable for WBC 6.8 k/uL, BNP <2000, troponin<5% LVEF 
+75%, Na 144/Cr 0.9, UA negative.
+He was given norepinephrine infuson starting at 10mcg/min for CVP 
+goal >12mmHg which improved his blood pressure significantly. A 
+CXR showed no acute changes other than slight bibasilar pleural 
+effusions. EKG was unchanged compared to prior showing LAHF with 
+left atrial enlargement and nonspecific ST-T wave abnormalities. 
+TTE showed EF of 70-80% biventricular systolic function w/ low 
+ejection fraction ventricular septal wall motion abnormality, new 
+pericardial effusion, minimal pulmonary hypertension consistent 
+with mild TR, normal LV diastolic dysfunction.
+
+His exam revealed an elderly gentleman appearing older than 
+chronological age, with poor dentition, wearing hearing aid on 
+the right ear, with intact motor functions and strength, nonfocal 
+neurological examination otherwise unremarkable. HEENT was clear 
+excepting decreased oral mucosa secondary to dental disease. 
+Cardiac auscultation was significant for S3, normal s1-s2 split, 
+and pansystolic murmur heard best along left sternal border, 
+grade II/VI holosystolic murmer heard best near RUSB. Abdomen 
+was soft, mildly distended, and tender diffusely, +BS. Extremities 
+were cool but without edema. No focal neurological findings.  
+Pt had some difficulty standing up and ambulating due to leg 
+pain. The rest of neurologic exam was grossly nonfocal, 
+including CNs II-XII within normal limits. He is somewhat hard of 
+hearing so he often doesn't hear instructions unless they are 
+repeated multiple times. 
+
+On further questioning it appears pt was recently hospitalized 
+at ___ for "kidney stone" per discharge summary report attached 
+for reference (see below). While there he reportedly developed 
+new lower extremity weakness in setting of renal failure requiring 
+dialysis on ___ (note also noted bilateral pitting edema), 
+but apparently made good progress with dialysis as his kidney 
+function recovered well enough such that he could return home 
+without needing ongoing hemodialysis.
+
+Overnight pt tolerated regular diet and appeared to have stable 
+BP's around 130's-140's. Pt required only one additional dose of 
+demoral for sedation overnight but was off all medications when 
+seen by admitting team this morning. This am he went through 
+his history of illness including recent hospitalization and said 
+that since then he had increased back pain despite taking Vicodin 
+___. Otherwise, he denies current complaints. Denies fever/chills, night sweats, 
+weight loss/change in appetite, cough/chest pain/rhinorrhea/conjunctivitis, headache, vision changes, dyspnea,
+palpitations, nausea/vomiting/diarrhea/constipation/blood stools,
+urinary frequency/severe dysuria/saddle area numbness/weakness, 
+hematuria, abdominal/back pain, melena/hematemesis, rash or skin 
+changes.   
+   
+REVIEW OF SYSTEMS: Complete ROS obtained and reviewed in detail. 
+
+
+PERMISSION TO CONTACT HOME AND/OR FAMILY FOR CLINICAL HISTORY:
+
+Patient authorized me to contact family member(s)/primary care 
+physician if I need information about their past medical history 
+or allergies.
+
+
+ 
+Past Medical History:
+HTN - poorly controlled, uses metoprolol XL 50mg daily
+HLD  
+Chronic back pain
+Prostate cancer treated with surgery, now NED
+  
+ 
+Social History:
+___
+Family History:
+non-contributory  
+
+ 
+Physical Exam:
+ADMISSION PHYSICAL EXAMINATION:
+
+VS: T99.2P81HR65RR16O21.96/RABP142(141/67)(122-163)
+GENERAL: Elderly male lying comfortably in bed in NAD
+HEENT: NCAT. PERRLA, EOMI. MMM, OP clear. Poor dentition. Hearing 
+aid on R ear
+NECK: Supple, no JVD appreciated.
+CV: Regular rate and rhythm. Normal S1/S2, grade III/IV pansystolic 
+murmur loudest over RUSB
+LUNGS: CTAB anteriorly
+ABDOMEN: Soft, NTND, +BS, no rebound/guarding, abdomen tender 
+diffusely.
+EXTREMITIES: Warm and well perfused. Bilateral pedal pulses 
++2. No clubbing, cyanosis, or edema. Left foot shows evidence of 
+old ulcer scar. Right lower extremity with old healed venous 
+ulcer scars bilaterally. Small amount of fluid leaking out of 
+incision site of previous surgeries.
+SKIN: warm and dry, no rashes
+NEUROLOGIC: Alert and interactive. Oriented to person, place, and 
+time, but unable to tell year correctly. Moving both arms and legs 
+spontaneously. Face symmetric, speech fluent, moving tongue side 
+to side easily. Gait deferred. 
+PSYCHIATRIC: Appropriate affect, cooperative during interview.
+
+DISCHARGE PHYSICAL EXAMINATION:
+Vital Signs: T98.4 BP126/84 HR61 RR20 PO2=82%
+General: sitting upright, looking rested, comfortable, appropriate, pleasant demeanor
+Eyes: extraocular movements present, pupil equal round and react
+CN:  olfactory sensation diminished but preserved; visual acuity
+reflexes spared bilaterally; smile symmetrical, face symmetric,
+normal verbal output
+Motor: Power full strength upper/lower extremeties bilaterally;
+no tremors/athetoid movements/tics observed; fine finger movement
+preserved
+Sensation: Intact to light touch bilaterally; reflexes preserved
+bilaterally; deep tendon reflexes absent bilaterally
+Coordination/Gait: able to sit on edge of bed and walk without assistance
+Neurology:  no facial droops or asymmetry, tone normal throughout
+upper and lower extremities, no pronator drift, gait deferred 
+
+ 
+Pertinent Results:
+ADMISSION LABORATORIES:
+
+___ 03:55PM   GLUCOSE-118* UREA N-23* CREAT-1.7* SODIUM-139 
+POTASSIUM-5.0 CHLORIDE-108 TOTAL CO2-15* ANION GAP-17
+___ 03:55PM   CALCIUM-11.6* PHOSPHATE-3.7 MAGNESIUM-2.5
+___ 03:47PM URINE  COLORS-PERSONAL DENSE-SLIGHT 
+BACTERIA-FEW YEAST-NONE EPILYSIS-BIG
+___ 02:25PM   ALBUMIN-3.6 CALCIUM-9.2* PHOSPHATE-4.2 
+MAGNESIUM-2.___ with a hx of HTN/HLD/PCTa/Male breast Ca presented with lethargy/confusion, and was diagnosed with septic shock and possible urosepsis, likely related to Foley catheter associated urinary tract infection. Initially started on vancomycin q24h and ceftriaxone for potential gram neg sepsis and empirically continued docusate sodium for constipation. Patient's mental status improved rapidly following administration of demerol. Labs trended towards baseline excepting for elevated WBC count persistently above 12k on day of discharge. Imaging studies demonstrated incidental finding of small subchoroidal hemorrhage vs retinal tear. Patient underwent MRI brain demonstrating resolving subchoroidal bleed, no structural lesion identified. 
+
+Acute Management Plan:
+
+# Septic Shock: Initial presentation concerning for septic 
+shock however upon imaging no source identified. Pt transferred 
+from ___ ICUS to medicine service. Vanco/Ceftraq remained 
+continued. Following admission labs trending towards baseline, 
+though still slightly leukocytotic. Urine culture positive for 
+Gram-negative rods sensitive to cephalosporins although most 
+likely colonized rather than pathogenic given clinical scenario 
+of suspected UTI vs. contamination via foley catheter placed on 
+prior hospital stay. Continued broad spectrum antibiotics given 
+high risk of pyelonephritis, though patient's condition had 
+resolved sufficiently for transition to outpatient treatment 
+following antibiotic stewardship discussion.
+
+# Confusion/Lethargy/Dementia: Seen briefly during eval 
+initially, attributed to chronic process possibly exacerbated by 
+septic encephalopathy, resolution rapid onset once urine stream 
+established again on morning of second day. Improved dramatically 
+after receiving medication, returned home with caregiver support, 
+will follow-up closely in OT clinic
+
+# Lower extremity Edema/Acute Kidney Injury: Resolved quickly 
+upon initiating diuretic therapy.
+
+# Back Pain: Persistent complaint post-hospitalization. Continue 
+home prescription oxycodone-acetaminophen combination tablet 
+given improvement on previous regimen. Consider referral to PMR 
+service for management.
+
+Discharge Medications:
+1. Oxycodone-Acetaminophen ___ mg Tablet Sig: Two (2) Tablets 
+PO Q4H (every 4 hours) as needed for breakthrough pain: do NOT take more frequently than every 6hours 
+RX *oxycodone-acetaminophen [Endocet] 5 mg-325 mg 1 tablet(s) by mouth four times a day Disp #*30 Capsule Refills:*0 
+2. Acetazolamide 250 mg Tablet Sig: One (1) Tablet PO BID (2 times a day): DO NOT TAKE THIS IF YOU ARE ALLERGIC TO PENICILLINS OR HAVE SEVERE KIDNEY PROBLEMS
+3. Furosemide 40 mg Tablet Sig: Three (3) Tablet PO BID (2 times a day).
+Disp #*:45 Tablet Refills:*0 
+4. Bisacodyl 5 mg Tab Prn 
+Please Note: Only Use If you Have Not Had Bowel Movement After Trying Other Above Measures For Constipation
+Use Before Taking Any Pill That Is Hard To Swallow, Take Plenty Of Water And Follow Up With Oral Solution If Needed
+Take Once Daily At Bed Time As Directed RX *bisacodyl 5 mg 1 tab prn Disp #*36 Tab Refills:*0 
+5. Promethazine HCl 25 mg Tablet Sig: One (1) Tablet PO HS (at bedtime): ONLY USE AS DIRECTED, PLEASE NOTE SIDE EFFECT WARNING
+Do Not Drink Alcohol Or Operate Machinery When You Are Using This Med Again
+RX *promethazine hydrochloride 25 mg 1 tablet(s) by mouth nightly Disp #*14 Tablet Refills:*0 
+
+Medications Continued From Previous Admission:
+None
+
+ALL MEDICATIONS CONTINUING FROM PREVIOUS ADMITITON:
+Nil
+
+Dispo:
+Home with Caregiver Support
+ 
+Followup Instructions:
+___
+

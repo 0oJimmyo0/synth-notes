@@ -132,7 +132,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--top_k_values", default="50", help="Comma-separated top-k values to cycle through")
     parser.add_argument("--batch_size", type=int, default=4, help="ELM generation batch size")
     parser.add_argument("--max_new_tokens", type=int, default=2048, help="Maximum new tokens per candidate")
+    parser.add_argument("--min_new_tokens", type=int, default=0, help="Minimum new tokens per candidate before EOS can stop decoding")
     parser.add_argument("--repetition_penalty", type=float, default=1.2, help="Generation repetition penalty")
+    parser.add_argument(
+        "--clinic_note_prompt_mode",
+        default="default",
+        choices=["default", "discharge_structured"],
+        help="Prompt template for clinic-note generation",
+    )
     parser.add_argument("--device", default="cuda", help="Generation device for ELM")
     parser.add_argument("--embedding_device", default="auto", choices=["auto", "cpu", "cuda"])
     parser.add_argument("--embedding_batch_size", type=int, default=256)
@@ -869,7 +876,9 @@ def main() -> None:
                 top_p=float(plan["top_p"]),
                 top_k=int(plan["top_k"]),
                 max_new_tokens=int(args.max_new_tokens),
+                min_new_tokens=int(args.min_new_tokens) if int(args.min_new_tokens) > 0 else None,
                 do_sample=True,
+                clinic_note_prompt_mode=args.clinic_note_prompt_mode,
             )
             generated_notes.extend(batch_notes)
 
@@ -899,6 +908,8 @@ def main() -> None:
                     "top_k": int(plan["top_k"]),
                     "repetition_penalty": float(args.repetition_penalty),
                     "max_new_tokens": int(args.max_new_tokens),
+                    "min_new_tokens": int(args.min_new_tokens),
+                    "clinic_note_prompt_mode": args.clinic_note_prompt_mode,
                     "checkpoint_path": str(Path(args.checkpoint_path).resolve()),
                     "backbone_path": str(Path(args.backbone_path).resolve()),
                     "checkpoint_format": model_meta["checkpoint_format"],
@@ -1251,6 +1262,7 @@ def main() -> None:
         "checkpoint_path": str(Path(args.checkpoint_path).resolve()),
         "backbone_path": str(Path(args.backbone_path).resolve()),
         "embedding_model_name": args.embedding_model_name,
+        "clinic_note_prompt_mode": args.clinic_note_prompt_mode,
         "embedding_device_resolved": resolved_embedding_device,
         "cluster_assignments_path": str(cluster_assignments_path),
         "split_manifest_path": str(split_manifest_path) if split_manifest_path else None,
@@ -1258,6 +1270,8 @@ def main() -> None:
         "target_centroid_distance_threshold": float(centroid_distance_threshold),
         "n_candidates_per_anchor": int(args.n_candidates_per_anchor),
         "accepted_per_anchor": int(args.accepted_per_anchor),
+        "max_new_tokens": int(args.max_new_tokens),
+        "min_new_tokens": int(args.min_new_tokens),
         "shard_id": int(args.shard_id),
         "num_shards": int(args.num_shards),
         "total_anchors": int(len(anchor_df)),

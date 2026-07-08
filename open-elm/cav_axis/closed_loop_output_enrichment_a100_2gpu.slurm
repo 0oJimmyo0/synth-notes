@@ -5,9 +5,9 @@
 #SBATCH --time=06:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=8
-#SBATCH --mem=48G
-#SBATCH --gres=gpu:a100:2
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=32G
+#SBATCH --gres=gpu:a40:2
 #SBATCH --partition=gpu
 
 set -euo pipefail
@@ -76,7 +76,9 @@ run_shard () {
     --top_k_values "${TOP_K_VALUES:-50}" \
     --batch_size "${BATCH_SIZE:-4}" \
     --max_new_tokens "${MAX_NEW_TOKENS:-2048}" \
+    --min_new_tokens "${MIN_NEW_TOKENS:-0}" \
     --repetition_penalty "${REPETITION_PENALTY:-1.2}" \
+    --clinic_note_prompt_mode "${CLINIC_NOTE_PROMPT_MODE:-default}" \
     --device "${DEVICE:-cuda}" \
     --embedding_device "${EMBEDDING_DEVICE:-cuda}" \
     --embedding_batch_size "${EMBEDDING_BATCH_SIZE:-256}" \
@@ -118,7 +120,21 @@ num_shards = 2
 def load_jsonl(path: Path):
     if not path.exists():
         raise FileNotFoundError(path)
+    if path.stat().st_size == 0:
+        return pd.DataFrame()
     return pd.read_json(path, lines=True, dtype=False)
+
+def safe_concat_sort(frames, sort_cols):
+    nonempty = [frame for frame in frames if frame is not None and len(frame)]
+    if not nonempty:
+        return pd.DataFrame(columns=sort_cols)
+    merged = pd.concat(nonempty, ignore_index=True)
+    usable_sort_cols = [col for col in sort_cols if col in merged.columns]
+    if usable_sort_cols:
+        merged = merged.sort_values(usable_sort_cols).reset_index(drop=True)
+    else:
+        merged = merged.reset_index(drop=True)
+    return merged
 
 candidate_frames = []
 accepted_frames = []
@@ -142,14 +158,15 @@ for shard_id in range(num_shards):
     review_frames.append(pd.read_csv(outdir / f"accepted_note_manual_review_sample{suffix}.csv"))
     summary_objs.append(json.loads((outdir / f"closed_loop_enrichment_summary{suffix}.json").read_text()))
 
-candidate_df = pd.concat(candidate_frames, ignore_index=True).sort_values(["anchor_id", "candidate_index"]).reset_index(drop=True)
-accepted_df = pd.concat(accepted_frames, ignore_index=True).sort_values(["anchor_id", "candidate_index"]).reset_index(drop=True)
-rejected_df = pd.concat(rejected_frames, ignore_index=True).sort_values(["anchor_id", "candidate_index"]).reset_index(drop=True)
-faithfulness_df = pd.concat(faithfulness_frames, ignore_index=True)
-anchor_df = pd.concat(anchor_frames, ignore_index=True).sort_values(["anchor_id"]).reset_index(drop=True)
-patient_df = pd.concat(patient_frames, ignore_index=True)
-coverage_df = pd.concat(coverage_frames, ignore_index=True)
-review_df = pd.concat(review_frames, ignore_index=True)
+candidate_df = safe_concat_sort(candidate_frames, ["anchor_id", "candidate_index"])
+accepted_df = safe_concat_sort(accepted_frames, ["anchor_id", "candidate_index"])
+rejected_df = safe_concat_sort(rejected_frames, ["anchor_id", "candidate_index"])
+faithfulness_df = pd.concat(faithfulness_frames, ignore_index=True) if faithfulness_frames else pd.DataFrame()
+anchor_df = safe_concat_sort(anchor_frames, ["anchor_id"])
+patient_df = pd.concat(patient_frames, ignore_index=True) if patient_frames else pd.DataFrame()
+coverage_df = pd.concat(coverage_frames, ignore_index=True) if coverage_frames else pd.DataFrame()
+review_nonempty = [frame for frame in review_frames if frame is not None and len(frame)]
+review_df = pd.concat(review_nonempty, ignore_index=True) if review_nonempty else pd.DataFrame()
 
 candidate_df.to_json(outdir / "closed_loop_candidate_manifest.jsonl", orient="records", lines=True)
 accepted_df.to_json(outdir / "closed_loop_accepted_manifest.jsonl", orient="records", lines=True)
@@ -191,7 +208,7 @@ def rate_or_nan(df, col):
 summary = dict(summary_objs[0])
 summary["shard_id"] = None
 summary["num_shards"] = num_shards
-summary["total_anchors"] = int(anchor_df["anchor_id"].nunique())
+summary["total_anchors"] = int(anchor_df["anchor_id"].nunique()) if "anchor_id" in anchor_df.columns else 0
 summary["total_candidates_generated"] = int(len(candidate_df))
 summary["total_accepted"] = int(len(accepted_df))
 summary["acceptance_rate"] = float(len(accepted_df) / len(candidate_df)) if len(candidate_df) else math.nan

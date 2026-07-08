@@ -1,0 +1,11 @@
+{
+  "n_total": 2048,
+  "n_truncation_flag": 1690,
+  "n_hit_or_exceed_2048_tokens": 1233,
+  "truncation_and_hit_2048": 1051,
+  "nontruncation_and_hit_2048": 182,
+  "median_tokens_trunc": 2048.0,
+  "median_tokens_nontrunc": 2048.0,
+  "p90_tokens_trunc": 2049.0,
+  "p90_tokens_nontrunc": 2049.0
+}
