@@ -114,6 +114,7 @@ def batch_inference(
     min_new_tokens=None,
     do_sample=False,
     clinic_note_prompt_mode="default",
+    return_generation_metadata=False,
 ):
     """
     Run inference in batch mode.
@@ -132,9 +133,10 @@ def batch_inference(
         min_new_tokens: Minimum number of new tokens to generate before EOS can stop decoding
         do_sample: Whether to use sampling (default: False, uses greedy if False)
         clinic_note_prompt_mode: Prompt style for clinic-note generation
+        return_generation_metadata: Whether to also return per-example generation metadata
                 
     Returns:
-        List of generated outputs
+        List of generated outputs, and optionally per-example metadata
     """
     
     # Process in batches
@@ -258,11 +260,33 @@ def batch_inference(
     
     # Decode outputs
     results = []
+    metadata = []
+    eos_ids = generation_kwargs.get("eos_token_id", [])
+    if isinstance(eos_ids, int):
+        eos_id_set = {int(eos_ids)}
+    else:
+        eos_id_set = {int(x) for x in eos_ids}
     for j, output in enumerate(outputs):
         prompt_length = prompt_lengths[j]
-        result = tokenizer.decode(output[prompt_length:], skip_special_tokens=True)
+        generated_ids = output[prompt_length:]
+        result = tokenizer.decode(generated_ids, skip_special_tokens=True)
         results.append(result)
+        generated_token_count = int(generated_ids.shape[0])
+        last_token_id = int(generated_ids[-1].item()) if generated_token_count > 0 else None
+        metadata.append(
+            {
+                "generated_token_count": generated_token_count,
+                "max_new_tokens": int(max_new_tokens),
+                "hit_max_new_tokens": bool(generated_token_count >= max(0, int(max_new_tokens) - 1)),
+                "ended_with_eos": bool(last_token_id in eos_id_set) if last_token_id is not None else False,
+                "last_generated_token_id": last_token_id,
+                "prompt_length": int(prompt_length),
+                "clinic_note_prompt_mode": clinic_note_prompt_mode,
+            }
+        )
     
+    if return_generation_metadata:
+        return results, metadata
     return results
 
 def batch_pair_inference(model, tokenizer, embeddings_i, embeddings_j, device, task="commonality"):

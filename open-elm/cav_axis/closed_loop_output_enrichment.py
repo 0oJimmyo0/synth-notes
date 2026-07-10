@@ -741,12 +741,18 @@ def markdown_summary(summary: dict[str, Any]) -> str:
         f"- Rejected mean source cosine: `{summary['rejected_mean_source_cosine']:.4f}`",
         "",
         "## Privacy / Quality",
+        f"- Accepted hit-max-new-tokens rate: `{summary['accepted_hit_max_new_tokens_rate']:.4f}`",
+        f"- Rejected hit-max-new-tokens rate: `{summary['rejected_hit_max_new_tokens_rate']:.4f}`",
+        f"- Accepted ended-with-EOS rate: `{summary['accepted_ended_with_eos_rate']:.4f}`",
+        f"- Rejected ended-with-EOS rate: `{summary['rejected_ended_with_eos_rate']:.4f}`",
         f"- Accepted truncation rate: `{summary['accepted_truncation_rate']:.4f}`",
         f"- Rejected truncation rate: `{summary['rejected_truncation_rate']:.4f}`",
         f"- Accepted structure-pass rate: `{summary['accepted_structure_pass_rate']:.4f}`",
         f"- Rejected structure-pass rate: `{summary['rejected_structure_pass_rate']:.4f}`",
-        f"- Accepted clinical-sanity warning rate: `{summary['accepted_clinical_sanity_rate']:.4f}`",
-        f"- Rejected clinical-sanity warning rate: `{summary['rejected_clinical_sanity_rate']:.4f}`",
+        f"- Accepted clinical-sanity fail rate: `{summary['accepted_clinical_sanity_fail_rate']:.4f}`",
+        f"- Rejected clinical-sanity fail rate: `{summary['rejected_clinical_sanity_fail_rate']:.4f}`",
+        f"- Accepted clinical-sanity pass rate: `{summary['accepted_clinical_sanity_pass_rate']:.4f}`",
+        f"- Rejected clinical-sanity pass rate: `{summary['rejected_clinical_sanity_pass_rate']:.4f}`",
         f"- Accepted collapse rate: `{summary['accepted_collapse_rate']:.4f}`",
         f"- Rejected collapse rate: `{summary['rejected_collapse_rate']:.4f}`",
         f"- Accepted PHI-warning rate: `{summary['accepted_phi_warning_rate']:.4f}`",
@@ -863,9 +869,10 @@ def main() -> None:
             f"seed={plan['seed']} temp={plan['temperature']} top_p={plan['top_p']} top_k={plan['top_k']}"
         )
         generated_notes: list[str] = []
+        generated_meta: list[dict[str, Any]] = []
         for start in range(0, len(anchor_embeddings), int(args.batch_size)):
             stop = min(start + int(args.batch_size), len(anchor_embeddings))
-            batch_notes = batch_inference(
+            batch_notes, batch_meta = batch_inference(
                 model,
                 tokenizer,
                 anchor_embeddings[start:stop],
@@ -879,14 +886,19 @@ def main() -> None:
                 min_new_tokens=int(args.min_new_tokens) if int(args.min_new_tokens) > 0 else None,
                 do_sample=True,
                 clinic_note_prompt_mode=args.clinic_note_prompt_mode,
+                return_generation_metadata=True,
             )
             generated_notes.extend(batch_notes)
+            generated_meta.extend(batch_meta)
 
         if len(generated_notes) != len(anchor_df):
             raise ValueError("Generated note count does not match anchor count")
+        if len(generated_meta) != len(anchor_df):
+            raise ValueError("Generated metadata count does not match anchor count")
 
         for row_idx, note in enumerate(generated_notes):
             anchor_row = anchor_df.iloc[row_idx]
+            note_meta = generated_meta[row_idx]
             candidate_id = f"{anchor_row['anchor_id']}_cand{int(plan['candidate_index']):02d}"
             qflags = quality_flags(note)
             phi_map = phi_flags(note)
@@ -926,6 +938,11 @@ def main() -> None:
                     "source_cluster_id": int(anchor_row["cluster_id"]) if "cluster_id" in anchor_row and not pd.isna(anchor_row["cluster_id"]) else None,
                     "generated_text": note,
                     "text_hash": text_hash(note),
+                    "generated_token_count": int(note_meta["generated_token_count"]),
+                    "hit_max_new_tokens": bool(note_meta["hit_max_new_tokens"]),
+                    "ended_with_eos": bool(note_meta["ended_with_eos"]),
+                    "last_generated_token_id": note_meta["last_generated_token_id"],
+                    "prompt_length": int(note_meta["prompt_length"]),
                     **qflags,
                     "truncation_flag": bool(truncation_flag),
                     "truncation_reason": truncation_reason,
@@ -1282,12 +1299,18 @@ def main() -> None:
         "accepted_centroid_distance_pass_rate": float(accepted_df["target_centroid_distance_pass"].mean()) if len(accepted_df) else math.nan,
         "accepted_mean_source_cosine": float(accepted_df["source_synthetic_cosine"].mean()) if len(accepted_df) else math.nan,
         "rejected_mean_source_cosine": float(rejected_df["source_synthetic_cosine"].mean()) if len(rejected_df) else math.nan,
+        "accepted_hit_max_new_tokens_rate": group_flag_rate(accepted_df, "hit_max_new_tokens"),
+        "rejected_hit_max_new_tokens_rate": group_flag_rate(rejected_df, "hit_max_new_tokens"),
+        "accepted_ended_with_eos_rate": group_flag_rate(accepted_df, "ended_with_eos"),
+        "rejected_ended_with_eos_rate": group_flag_rate(rejected_df, "ended_with_eos"),
         "accepted_truncation_rate": group_flag_rate(accepted_df, "truncation_flag"),
         "rejected_truncation_rate": group_flag_rate(rejected_df, "truncation_flag"),
         "accepted_structure_pass_rate": float(accepted_df["structure_pass"].mean()) if len(accepted_df) else math.nan,
         "rejected_structure_pass_rate": float(rejected_df["structure_pass"].mean()) if len(rejected_df) else math.nan,
-        "accepted_clinical_sanity_rate": group_flag_rate(accepted_df, "clinical_sanity_flag"),
-        "rejected_clinical_sanity_rate": group_flag_rate(rejected_df, "clinical_sanity_flag"),
+        "accepted_clinical_sanity_fail_rate": group_flag_rate(accepted_df, "clinical_sanity_flag"),
+        "rejected_clinical_sanity_fail_rate": group_flag_rate(rejected_df, "clinical_sanity_flag"),
+        "accepted_clinical_sanity_pass_rate": 1.0 - group_flag_rate(accepted_df, "clinical_sanity_flag") if len(accepted_df) else math.nan,
+        "rejected_clinical_sanity_pass_rate": 1.0 - group_flag_rate(rejected_df, "clinical_sanity_flag") if len(rejected_df) else math.nan,
         "accepted_collapse_rate": group_flag_rate(accepted_df, "repetition_or_collapse_flag"),
         "rejected_collapse_rate": group_flag_rate(rejected_df, "repetition_or_collapse_flag"),
         "accepted_phi_warning_rate": group_flag_rate(accepted_df, "phi_warning_flag"),

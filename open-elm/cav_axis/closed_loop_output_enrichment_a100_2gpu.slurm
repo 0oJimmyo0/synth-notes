@@ -8,7 +8,7 @@
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=32G
 #SBATCH --gres=gpu:a40:2
-#SBATCH --partition=gpu
+#SBATCH --partition=gpu_devel
 
 set -euo pipefail
 
@@ -216,10 +216,18 @@ summary["accepted_target_cluster_rate"] = rate_or_nan(accepted_df, "nearest_clus
 summary["accepted_centroid_distance_pass_rate"] = rate_or_nan(accepted_df, "target_centroid_distance_pass")
 summary["accepted_mean_source_cosine"] = mean_or_nan(accepted_df, "source_synthetic_cosine")
 summary["rejected_mean_source_cosine"] = mean_or_nan(rejected_df, "source_synthetic_cosine")
+summary["accepted_hit_max_new_tokens_rate"] = rate_or_nan(accepted_df, "hit_max_new_tokens")
+summary["rejected_hit_max_new_tokens_rate"] = rate_or_nan(rejected_df, "hit_max_new_tokens")
+summary["accepted_ended_with_eos_rate"] = rate_or_nan(accepted_df, "ended_with_eos")
+summary["rejected_ended_with_eos_rate"] = rate_or_nan(rejected_df, "ended_with_eos")
 summary["accepted_collapse_rate"] = rate_or_nan(accepted_df, "repetition_or_collapse_flag")
 summary["rejected_collapse_rate"] = rate_or_nan(rejected_df, "repetition_or_collapse_flag")
 summary["accepted_phi_warning_rate"] = rate_or_nan(accepted_df, "phi_warning_flag")
 summary["rejected_phi_warning_rate"] = rate_or_nan(rejected_df, "phi_warning_flag")
+summary["accepted_clinical_sanity_fail_rate"] = rate_or_nan(accepted_df, "clinical_sanity_flag")
+summary["rejected_clinical_sanity_fail_rate"] = rate_or_nan(rejected_df, "clinical_sanity_flag")
+summary["accepted_clinical_sanity_pass_rate"] = 1.0 - summary["accepted_clinical_sanity_fail_rate"] if not math.isnan(summary["accepted_clinical_sanity_fail_rate"]) else math.nan
+summary["rejected_clinical_sanity_pass_rate"] = 1.0 - summary["rejected_clinical_sanity_fail_rate"] if not math.isnan(summary["rejected_clinical_sanity_fail_rate"]) else math.nan
 summary["privacy_warning_rates"] = {
     "accepted_exact_duplicate_vs_train_rate": rate_or_nan(accepted_df, "exact_duplicate_vs_train_flag"),
     "rejected_exact_duplicate_vs_train_rate": rate_or_nan(rejected_df, "exact_duplicate_vs_train_flag"),
@@ -258,6 +266,14 @@ def markdown(summary):
         f"- Rejected mean source cosine: `{summary['rejected_mean_source_cosine']:.4f}`",
         "",
         "## Privacy / Quality",
+        f"- Accepted hit-max-new-tokens rate: `{summary['accepted_hit_max_new_tokens_rate']:.4f}`",
+        f"- Rejected hit-max-new-tokens rate: `{summary['rejected_hit_max_new_tokens_rate']:.4f}`",
+        f"- Accepted ended-with-EOS rate: `{summary['accepted_ended_with_eos_rate']:.4f}`",
+        f"- Rejected ended-with-EOS rate: `{summary['rejected_ended_with_eos_rate']:.4f}`",
+        f"- Accepted clinical-sanity fail rate: `{summary['accepted_clinical_sanity_fail_rate']:.4f}`",
+        f"- Rejected clinical-sanity fail rate: `{summary['rejected_clinical_sanity_fail_rate']:.4f}`",
+        f"- Accepted clinical-sanity pass rate: `{summary['accepted_clinical_sanity_pass_rate']:.4f}`",
+        f"- Rejected clinical-sanity pass rate: `{summary['rejected_clinical_sanity_pass_rate']:.4f}`",
         f"- Accepted collapse rate: `{summary['accepted_collapse_rate']:.4f}`",
         f"- Rejected collapse rate: `{summary['rejected_collapse_rate']:.4f}`",
         f"- Accepted PHI-warning rate: `{summary['accepted_phi_warning_rate']:.4f}`",
