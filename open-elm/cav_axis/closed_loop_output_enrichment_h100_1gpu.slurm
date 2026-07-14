@@ -2,7 +2,7 @@
 #SBATCH --job-name=closed_loop_enrich_1g
 #SBATCH --output=/gpfs/radev/pi/xu_hua/shared/synthnote/physionet.org/files/embedding_elm/open-elm/log/closed_loop_output_enrichment/closed_loop_output_enrichment_1g_%j.out
 #SBATCH --error=/gpfs/radev/pi/xu_hua/shared/synthnote/physionet.org/files/embedding_elm/open-elm/log/closed_loop_output_enrichment/closed_loop_output_enrichment_1g_%j.err
-#SBATCH --time=16:00:00
+#SBATCH --time=47:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8

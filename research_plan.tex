@@ -234,11 +234,17 @@ Proceed to steering only after we know which regions are under-covered and can j
 
 Goal: determine whether target-specific steering can enrich specific real-manifold regions after decoding.
 \textbf{Current conclusion.}
-The first global-axis pilots, local additive pilots, and the recent projected-boundary pilot were all scientifically useful, but none yet justify scale-up. The main lesson is now clear:
+The first global-axis pilots, local additive pilots, projected-boundary pilots, and lightweight decoder-adaptation pilots were scientifically useful, but none justified inference-time scale-up. The main lesson is now clear:
 \begin{quote}
 good pre-decode geometry and acceptable note quality do \emph{not} guarantee that decoded notes will occupy the intended sparse real-note region.
 \end{quote}
-Therefore, the redesign must be adapted to the actual ELM interface: a \textbf{single 1024-d source embedding injected through a small adapter}. The next method should preserve local manifold structure and make the steering \textbf{source-conditioned}, instead of relying on one global direction or one uniform projection rule.
+The decoder-feasibility audit confirmed the limiting mechanism: even real target-basin embeddings weakly retained basin identity after ELM decode and BGE re-embedding. Therefore, the active method is no longer another input-space steering family. It is \textbf{closed-loop output-space enrichment}: generate several vanilla candidates from a real target anchor, re-embed each output, and retain only candidates that satisfy target-region, faithfulness, quality, privacy-risk, and diversity gates.
+
+\textbf{Current closed-loop result.}
+Using 256 held-out target-basin anchors, eight candidates per anchor, default prompting, and an 8192-token output budget produced 2,048 candidates and 106 strict accepted notes (5.18\%). This is a substantial improvement over the earlier 14-note strict run (0.68\%), largely because completion and structure improved at the longer output budget. Accepted notes have mean source cosine 0.823, structure-pass rate 1.00, and clinical-sanity-pass rate 1.00 under the current automated rules. They occupy the pooled local basin around clusters 9/17/29/45, while exact cluster-29 occupancy remains a secondary diagnostic.
+
+\textbf{Validation constraint.}
+Automated acceptance is not enough for clinical use. Initial expert review identified narrative stitching, diagnosis--procedure mismatch, implausible medication combinations, temporal contradictions, and generic boilerplate in some accepted notes. The next required experiment is therefore a \textbf{fair matched vanilla control}: one unselected default-prompt 8192-token vanilla draw from each of the same 106 source anchors, followed by anchor-level paired analysis and blinded clinical/source-faithfulness review. We do not scale candidate count or begin editing/downstream NER until this validation distinguishes target-region selection benefit from selection-induced clinical degradation.
 
 \textbf{Latest refinement from the cluster-29 pilot.}
 The most recent upper-bound and basin-margin analyses show that decoded notes are usually not flying to an unrelated part of the manifold. Instead, they remain inside a \textbf{nearby local basin} around cluster 29, especially near clusters 9, 17, and 45. This changes the scientific framing:
@@ -286,11 +292,11 @@ Stage 3 succeeds only if at least one steering condition:
 \textbf{Immediate next step for the current pilot.}
 For cluster 29, the next concrete evaluation block is:
 \begin{enumerate}[nosep]
+  \item freeze input-space steering and decoder-adaptation results as negative/partial evidence about decoder compatibility,
   \item keep `29/9/17/45` as the current candidate local basin, with `7` evaluated separately,
-  \item freeze the current linear additive family as a negative/partial finding on hard anchors,
-  \item redesign the operator around explicit \textbf{target-vs-competitor boundary crossing},
-  \item require a hard-anchor pre-decode win before any new large decode run,
-  \item only then decide whether the method is ready to scale to other sparse basins found in the full real-manifold map.
+  \item build the same-anchor, one-draw 8192-token vanilla control for all 106 accepted anchors,
+  \item compare accepted and vanilla notes with paired embedding, quality, privacy-risk, and blinded clinical/source-faithfulness review,
+  \item only then decide whether to add a clinical reranker, a constrained repair/editor, or modestly scale the closed-loop candidate pool.
 \end{enumerate}
 
 \textbf{Functionality.}
@@ -308,7 +314,7 @@ This is the project's main methodological innovation, and it only counts as a su
 \end{itemize}
 
 \textbf{Current status.}
-The first global axis-bank pilots were scientifically useful, but not strong enough to scale. Current local additive steering for cluster 29 should now be treated as a \textbf{negative/partial finding on hard anchors}: it improves target-vs-competitor margin, but still cannot produce a nonzero exact target-cluster win rate on the strongest held-out anchors. The projected-boundary pilot is also a \textbf{negative finding}: despite clean generation and PASS audit, it produced almost no exact cluster-29 occupancy after decoding. Therefore, the immediate next step is \textbf{competitor-aware redesign}, not more broad generation from the current additive/projection families.
+The input-space axis, local-transport, and decoder-adaptation families are now \textbf{negative/partial findings}: they clarify decoder compatibility but do not support inference-time enrichment claims. The current closed-loop result is a positive feasibility signal for final-output basin enrichment, but it remains under validation because automatic gates did not detect all clinically meaningful contradictions. The next milestone is a same-anchor matched-vanilla and blinded-review comparison, not another steering family or a larger candidate pool.
 
 \subsection{Stage 4: Editing and downstream utility}
 
@@ -389,8 +395,9 @@ Held-out real-only coverage baseline & \textbf{Done} & Preserve held-out baselin
 Real-vs-synthetic coverage mapping & \textbf{Done for vanilla baseline} & Use the held-out vanilla result as the comparison anchor for later pilots \\
 Subgroup metadata build & \textbf{Done} & Join subgroup fields into future coverage and CAV reports \\
 First global-axis CAV pilots + controls & \textbf{Done} & Keep as diagnostic evidence, not yet a scale-up mechanism \\
-Phase 2b local-direction redesign & \textbf{Active} & Test whether local target-specific steering beats matched vanilla and random shift on the same anchors \\
-LLM editor / external reference / NER & Phase 3 & Start only after a convincing CAV enrichment win \\
+Inference-time steering + decoder adaptation & \textbf{Frozen negative/partial} & Report decoder compatibility as the limiting mechanism; do not add another heuristic steering family \\
+Closed-loop output-space enrichment & \textbf{Active validation} & Compare 106 strict accepted notes against same-anchor 8192-token vanilla and blinded clinical/source-faithfulness review \\
+LLM editor / external reference / NER & Phase 3 & Start only after clinically credible closed-loop enrichment or a validated quality-control/editor strategy \\
 \bottomrule
 \end{tabularx}
 \caption{Compact project status and next-action tracker.}
@@ -416,18 +423,19 @@ LLM editor / external reference / NER & Phase 3 & Start only after a convincing 
 
 \textbf{Stage 3 success.}
 \begin{itemize}[nosep]
-  \item at least one steering condition improves target-region coverage,
-  \item that condition also preserves quality and faithfulness,
-  \item and it beats both matched vanilla and norm-matched random shift.
+  \item output-space selection improves target-basin enrichment beyond a same-anchor, same-decoding vanilla control,
+  \item accepted notes preserve source alignment, quality, diversity, and privacy-risk screens,
+  \item blinded clinical and source-faithfulness review does not reveal unacceptable semantic degradation,
+  \item acceptance rate and all rejected candidates are reported transparently.
 \end{itemize}
 
 \textbf{Stage 3 near-term redesign checklist.}
 \begin{itemize}[nosep]
-  \item Freeze the current projected-boundary family as a negative result.
-  \item Keep the best local additive cluster-29 pilot only as the current internal baseline, not as the final method.
-  \item Redesign the steering operator around \textbf{source-conditioned local transport} and \textbf{on-manifold correction}.
-  \item Run pre-decode geometry audit before any new scaled generation.
-  \item Only decode new pilots after the embedding-level operator shows target-entry gain on the same anchors.
+  \item Freeze input-space steering, projection, and decoder-adaptation families as negative/partial results.
+  \item Generate the one-draw, default-prompt 8192-token matched vanilla control on the 106 frozen accepted anchors.
+  \item Run anchor-level paired analysis of basin landing, source cosine, completion, quality, and privacy-risk flags.
+  \item Complete blinded clinical and source-faithfulness review, including accepted, near-miss, and matched-vanilla notes.
+  \item Use the observed error categories to choose a clinical reranker or constrained repair/editor before any scale-up.
 \end{itemize}
 
 \textbf{Stage 4 success.}

@@ -1,5 +1,38 @@
 # Project Memory
 
+## Current Stage: Closed-Loop Output-Space Enrichment Validation
+
+Input-space CAV/local transport and decoder-adaptation pilots are frozen as negative/partial findings: pre-decode geometry could improve, but the ELM decode--BGE re-embed map did not preserve sparse-basin identity reliably enough for input-space steering to be the Phase 2 mechanism.
+
+The active Phase 2 method is therefore closed-loop output-space enrichment: generate vanilla ELM candidates from real held-out anchors, re-embed every candidate with BGE, and retain only candidates that satisfy target-region, faithfulness, quality, privacy-risk, and diversity gates. This controls the final generated-note embedding instead of assuming an edited input embedding survives decoding.
+
+Frozen validation run:
+
+- run directory: `closed_loop_output_enrichment/cluster29_basin_v1_test8_2h100_strict_quality_max8192_default_rerun`
+- 256 target-basin held-out anchors; 8 candidates per anchor; 2,048 candidates total,
+- 106 strict accepted notes (`5.18%` acceptance), compared with 14 (`0.68%`) before the `8192`-token default-prompt update,
+- accepted notes: mean source cosine `0.8231`, structure-pass rate `1.00`, clinical-sanity-pass rate `1.00`, accepted EOS rate `0.9906`,
+- accepted notes land across the pooled local basin `9/17/29/45`; exact cluster 29 remains secondary rather than the sole success metric.
+
+Interpretation and current guardrail:
+
+- this is evidence that output-space selection can enrich a pre-defined local sparse basin,
+- it is not yet evidence that the notes are clinically reliable synthetic discharge summaries,
+- clinical review found narrative stitching, diagnosis/procedure mismatch, medication/temporal inconsistencies, and generic boilerplate in some accepted notes,
+- do not scale to `N=16` or begin LLM editing/downstream NER until fair same-anchor vanilla controls and structured source-faithfulness review are complete.
+
+Current validation tooling:
+
+- `cav_axis/prepare_closed_loop_validation_pack.py` freezes accepted review sheets, blinded accepted/near-miss/vanilla sets, transition tables, and gate routes,
+- `cav_axis/build_matched_vanilla_8192_control.py` builds a one-draw, unselected, default-prompt `8192`-token vanilla control from the same 106 accepted anchors and then creates an anchor-level paired analysis,
+- generated anchor manifest: `.../cluster29_basin_v1_test8_2h100_strict_quality_max8192_default_rerun/matched_vanilla_8192_control/matched_vanilla_8192_anchor_manifest.csv`.
+
+Immediate next step:
+
+1. run the matched one-draw vanilla control with the frozen `8192`-token/default decoding policy;
+2. run paired accepted-vs-vanilla analysis and blinded clinical/source-faithfulness review;
+3. decide whether the next method is a clinical reranker/quality model or a constrained repair/editor, based on explicit error categories rather than more candidate scale.
+
 ## Current Goal
 
 Build a clinically grounded synthetic discharge-summary pipeline on the new MIMIC-IV note/HADM-aligned cohort, with:
