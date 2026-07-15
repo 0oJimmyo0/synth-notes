@@ -241,10 +241,13 @@ good pre-decode geometry and acceptable note quality do \emph{not} guarantee tha
 The decoder-feasibility audit confirmed the limiting mechanism: even real target-basin embeddings weakly retained basin identity after ELM decode and BGE re-embedding. Therefore, the active method is no longer another input-space steering family. It is \textbf{closed-loop output-space enrichment}: generate several vanilla candidates from a real target anchor, re-embed each output, and retain only candidates that satisfy target-region, faithfulness, quality, privacy-risk, and diversity gates.
 
 \textbf{Current closed-loop result.}
-Using 256 held-out target-basin anchors, eight candidates per anchor, default prompting, and an 8192-token output budget produced 2,048 candidates and 106 strict accepted notes (5.18\%). This is a substantial improvement over the earlier 14-note strict run (0.68\%), largely because completion and structure improved at the longer output budget. Accepted notes have mean source cosine 0.823, structure-pass rate 1.00, and clinical-sanity-pass rate 1.00 under the current automated rules. They occupy the pooled local basin around clusters 9/17/29/45, while exact cluster-29 occupancy remains a secondary diagnostic.
+Using 256 held-out target-basin anchors, eight candidates per anchor, default prompting, and an 8192-token output budget produced 2,048 candidates and 106 strict accepted notes (5.18\%). This is a substantial improvement over the earlier 14-note strict run (0.68\%), largely because completion and structure improved at the longer output budget. The selected notes improve exact pooled-basin landing and automated quality relative to fair one-draw matched vanilla. They occupy the pooled local basin around clusters 9/17/29/45, while exact cluster-29 occupancy remains a secondary diagnostic. However, this result is now interpreted as \textbf{output-space geometry-selection feasibility}, not as clinically usable source-conditioned note synthesis.
 
 \textbf{Validation constraint.}
-Automated acceptance is not enough for clinical use. Initial expert review identified narrative stitching, diagnosis--procedure mismatch, implausible medication combinations, temporal contradictions, and generic boilerplate in some accepted notes. The next required experiment is therefore a \textbf{fair matched vanilla control}: one unselected default-prompt 8192-token vanilla draw from each of the same 106 source anchors, followed by anchor-level paired analysis and blinded clinical/source-faithfulness review. We do not scale candidate count or begin editing/downstream NER until this validation distinguishes target-region selection benefit from selection-induced clinical degradation.
+Automated acceptance is not enough for clinical use. The completed row-level review found missing or non-substantive sections in 205/206 blinded notes, frequent medication-reconciliation and physiologic-value errors, and severe source-anchor loss in the source-paired sample: principal diagnosis was not preserved in 67--68/68 cases, every synthetic variant contained an unsupported major claim and omitted a critical source fact, and no meaningful rescue appeared for exact-pool versus centroid-only selection. Thus, the selected notes can be geometrically target-aligned while representing a different clinical encounter. We do \textbf{not} scale candidate count, claim clinical enrichment, start source-free LLM editing, or begin downstream NER from this condition.
+
+\textbf{Definitive selector analysis.}
+The completed manifests now support three complementary analyses without new generation. First, selected notes improve exact pooled-basin landing over one-draw matched vanilla on the same 106 anchors (32.1\% versus 15.1\%; paired risk difference +17.0 percentage points, exact McNemar $p=0.0079$). Second, the all-anchor operational yield is 34 usable exact-basin notes (13.3\%), 72 centroid-only notes (28.1\%), and 150 anchors without a final accepted note (58.6\%). Third, a random-one-of-eight equal-compute baseline has higher \emph{raw} exact-basin landing (about 21.5\%) but very low clinically-rule-passing exact yield (about 1.75\%), whereas closed-loop selection yields 13.3\% usable exact-basin notes. Thus the primary selector endpoint is \textbf{usable exact pooled-basin enrichment}; raw exact landing is retained as a secondary geometry diagnostic because it can favor collapsed or clinically unusable candidates.
 
 \textbf{Latest refinement from the cluster-29 pilot.}
 The most recent upper-bound and basin-margin analyses show that decoded notes are usually not flying to an unrelated part of the manifold. Instead, they remain inside a \textbf{nearby local basin} around cluster 29, especially near clusters 9, 17, and 45. This changes the scientific framing:
@@ -294,9 +297,10 @@ For cluster 29, the next concrete evaluation block is:
 \begin{enumerate}[nosep]
   \item freeze input-space steering and decoder-adaptation results as negative/partial evidence about decoder compatibility,
   \item keep `29/9/17/45` as the current candidate local basin, with `7` evaluated separately,
-  \item build the same-anchor, one-draw 8192-token vanilla control for all 106 accepted anchors,
-  \item compare accepted and vanilla notes with paired embedding, quality, privacy-risk, and blinded clinical/source-faithfulness review,
-  \item only then decide whether to add a clinical reranker, a constrained repair/editor, or modestly scale the closed-loop candidate pool.
+  \item freeze the 106-note closed-loop run and fair matched-vanilla comparison as a \textbf{negative clinical-faithfulness gate} plus a positive geometry-selection finding,
+  \item correct privacy reporting so shared boilerplate is separated from material n-gram copying,
+  \item run a small \textbf{source-fact-conditioned generation feasibility study}: derive an approved structured fact representation from each source discharge summary, condition generation or correction on those facts rather than on free text alone, and evaluate factual preservation before any regional scale-up,
+  \item require improved diagnosis, procedure, complication, medication-change, and disposition preservation against the current near-zero baseline before considering a constrained editor or a larger candidate pool.
 \end{enumerate}
 
 \textbf{Functionality.}
@@ -314,7 +318,7 @@ This is the project's main methodological innovation, and it only counts as a su
 \end{itemize}
 
 \textbf{Current status.}
-The input-space axis, local-transport, and decoder-adaptation families are now \textbf{negative/partial findings}: they clarify decoder compatibility but do not support inference-time enrichment claims. The current closed-loop result is a positive feasibility signal for final-output basin enrichment, but it remains under validation because automatic gates did not detect all clinically meaningful contradictions. The next milestone is a same-anchor matched-vanilla and blinded-review comparison, not another steering family or a larger candidate pool.
+The input-space axis, local-transport, and decoder-adaptation families are now \textbf{negative/partial findings}: they clarify decoder compatibility but do not support inference-time enrichment claims. Closed-loop output selection is a positive feasibility signal for final-output basin landing, but the completed clinical and source-paired reviews fail the source-faithfulness requirement. The next milestone is a source-fact-conditioned feasibility study, not another steering family, a larger candidate pool, or a downstream-NLP experiment.
 
 \subsection{Stage 4: Editing and downstream utility}
 
@@ -331,7 +335,7 @@ Goal: improve note quality where needed and test whether the final synthetic cor
 These steps connect the project to the mentor's main interests: better synthetic-note quality and practical clinical NLP value.
 
 \textbf{Important constraint.}
-Editing and downstream evaluation only start after we have a synthetic-note condition worth carrying forward. Any edited note must still pass source-alignment and privacy checks.
+Editing and downstream evaluation only start after we have a synthetic-note condition worth carrying forward. An editor must be source-fact-conditioned and constrained; a source-free editor may polish a clinically wrong encounter. Any edited note must still pass source-alignment and privacy checks.
 
 %=============================================================================
 \section{Main risks and mitigation}

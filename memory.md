@@ -33,6 +33,30 @@ Immediate next step:
 2. run paired accepted-vs-vanilla analysis and blinded clinical/source-faithfulness review;
 3. decide whether the next method is a clinical reranker/quality model or a constrained repair/editor, based on explicit error categories rather than more candidate scale.
 
+## Definitive Validation Update: Equal-Compute Selector Analysis
+
+The completed manifests were reanalyzed without new generation using explicit gate routes and a random-one-of-eight equal-compute baseline.
+
+- same-anchor paired comparison (106 accepted anchors): exact pooled-basin landing is `32.1%` for selected notes versus `15.1%` for one-draw matched vanilla; paired risk difference `+17.0%` (bootstrap 95% CI `+5.7%` to `+28.3%`, exact McNemar `p=0.0079`),
+- patient-disjoint paired subset: `42.9%` selected versus `0%` matched vanilla (`n=21`), so this signal is not confined to patient-overlap rows, though the subset is small,
+- all-anchor operational yield (256 anchors): `34` exact-plus-centroid accepted notes (`13.3%`), `72` centroid-only accepted notes (`28.1%`), and `150` anchors with no final accepted note (`58.6%`),
+- raw random one-of-eight sampling has higher exact pooled landing (`21.5%`) than final selected output (`13.3%`), but it has very low clinical-rule pass (`7.3%`) and usable-exact pooled yield (`1.75%`, simulation 95% interval `0.39%`--`3.52%`),
+- therefore the defensible selector endpoint is \textbf{usable exact pooled-basin enrichment}: selected `13.3%` versus random one-of-eight `1.75%`; raw exact landing alone must be reported as a secondary diagnostic because it favors low-quality candidates.
+
+Current outputs:
+
+- `cav_axis/analyze_closed_loop_validation.py` writes paired, equal-compute, and all-anchor yield reports,
+- `cav_axis/backfill_closed_loop_gate_routes.py` writes non-destructive corrected legacy manifests with `exact_pooled_cluster_pass`, `centroid_proximity_pass`, and `gate_route`,
+- `cav_axis/build_source_faithfulness_review.py` produced a protected 68-case source review pack: all 34 exact pooled-basin accepted notes plus 34 centroid-only notes, each with a blinded matched vanilla comparator.
+
+Privacy-screen implementation update:
+
+- `cav_axis/closed_loop_train_text_privacy_screen.py` now treats `--max_train_texts 0` as uncapped and supports a BGE semantic top-$k$ train-neighbor shortlist before lexical 10-gram comparison,
+- lexical 10-grams are now cached only for retrieved train neighbors rather than materialized for the entire training corpus,
+- `cav_axis/closed_loop_train_text_privacy_screen.slurm` is the canonical CPU launcher (`devel`, 8 CPUs, 48G, 6h) and uses unbuffered progress logs.
+
+Next required gate remains human validation and full-train privacy screening. Do not scale candidate count or start multi-region generation until exact-basin selected notes are clinically non-inferior to fair vanilla and source faithfulness is acceptable.
+
 ## Current Goal
 
 Build a clinically grounded synthetic discharge-summary pipeline on the new MIMIC-IV note/HADM-aligned cohort, with:
@@ -1716,3 +1740,32 @@ Interpretation:
 
 - this is the next principal Phase 2b method family to test
 - it is more compatible with the ELM interface than broad additive or projection-only steering because it keeps shifted embeddings closer to real observed embeddings
+
+## July 15 closed-loop clinical validation: freeze 106-note run as geometry feasibility, fail clinical-faithfulness gate
+
+The completed matched-vanilla and privacy screens support the automated/embedding part of the closed-loop result:
+
+- 106 closed-loop selected notes and 106 fair same-anchor 8192-token vanilla controls were screened against all 262,895 filtered training notes.
+- exact train-note duplicates: `0` in both cohorts.
+- lexical similarity >= `0.8`: `0` in both cohorts.
+- accepted notes had better automated target alignment, source cosine, structure, and clinical-rule scores than matched vanilla.
+- the existing ``any shared 10-gram'' privacy flag was positive for every row in both cohorts and is too sensitive for interpretation because it captures routine discharge-summary boilerplate. Future privacy reporting must use an overlap ratio or material-copy threshold.
+
+The row-level human review overturns the interpretation that automatic acceptance alone establishes usable source-conditioned notes:
+
+- blinded clinical-quality review: `205/206` notes had missing or non-substantive sections; follow-up, disposition, diagnoses, instructions, medication reconciliation, physiologic values, and narrative coherence frequently failed.
+- source-paired review of 68 cases and two synthetic variants per case: principal diagnosis was not preserved in `67/68` (A) and `68/68` (B); unsupported major claims and critical source omissions occurred in all variants; source-anchor loss occurred in `67/68` (A) and `68/68` (B).
+- exact pooled-basin versus centroid-only route did not rescue source faithfulness.
+
+Decision:
+
+- freeze the 106-note closed-loop run as a positive \textbf{output-space geometry-selection} finding but a negative \textbf{clinical source-faithfulness} finding.
+- do not scale candidate count, claim clinically meaningful enrichment, start source-free LLM editing, or run downstream NER from this condition.
+- do not add more inference-time steering families.
+
+Next required feasibility block:
+
+1. retain the fair matched-vanilla, privacy, and review artifacts as the formal baseline;
+2. refine privacy reporting to distinguish boilerplate overlap from material copying;
+3. construct a small, approved \textbf{source-fact-conditioned} generation/correction pilot using structured source facts rather than a source-free editor;
+4. use source-paired factual preservation (diagnosis, procedures, complications, medication changes, disposition, unsupported claims, omissions) as the primary gate before any multi-region or cohort-scale enrichment work.
