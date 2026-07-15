@@ -981,10 +981,22 @@ def main() -> None:
     candidate_df["target_centroid_distance"] = target_centroid_dist
     candidate_df["nearest_cluster_id"] = nearest_cluster_ids
     candidate_df["nearest_cluster_cosine"] = nearest_cluster_sims
-    candidate_df["nearest_cluster_in_target"] = candidate_df["nearest_cluster_id"].isin(target_cluster_ids)
-    candidate_df["target_basin_membership_flag"] = candidate_df["nearest_cluster_in_target"]
-    candidate_df["target_centroid_distance_pass"] = candidate_df["target_centroid_distance"] <= centroid_distance_threshold
-    candidate_df["target_gate_pass"] = candidate_df["nearest_cluster_in_target"] | candidate_df["target_centroid_distance_pass"] | candidate_df["target_basin_membership_flag"]
+    # These are distinct routes.  Do not treat centroid proximity as exact
+    # pooled-basin membership when reporting output-space enrichment.
+    candidate_df["exact_pooled_cluster_pass"] = candidate_df["nearest_cluster_id"].isin(target_cluster_ids)
+    candidate_df["nearest_cluster_in_target"] = candidate_df["exact_pooled_cluster_pass"]  # Backward-compatible alias.
+    candidate_df["centroid_proximity_pass"] = candidate_df["target_centroid_distance"] <= centroid_distance_threshold
+    candidate_df["target_centroid_distance_pass"] = candidate_df["centroid_proximity_pass"]  # Backward-compatible alias.
+    candidate_df["gate_route"] = np.select(
+        [
+            candidate_df["exact_pooled_cluster_pass"] & candidate_df["centroid_proximity_pass"],
+            candidate_df["exact_pooled_cluster_pass"],
+            candidate_df["centroid_proximity_pass"],
+        ],
+        ["exact_plus_centroid", "exact_only", "centroid_only"],
+        default="neither",
+    )
+    candidate_df["target_gate_pass"] = candidate_df["exact_pooled_cluster_pass"] | candidate_df["centroid_proximity_pass"]
     candidate_df["target_score"] = [
         candidate_target_score(in_target, target_cos, src_cos)
         for in_target, target_cos, src_cos in zip(

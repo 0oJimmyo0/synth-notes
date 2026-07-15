@@ -252,20 +252,17 @@ def build_source_cluster_summary(candidate_df: pd.DataFrame, target_cluster_ids:
 
 
 def classify_gate_route(row: pd.Series) -> str:
-    exact_pass = bool(row.get("nearest_cluster_in_target", False))
-    centroid_pass = bool(row.get("target_centroid_distance_pass", False))
-    basin_pass = bool(row.get("target_basin_membership_flag", False))
-
-    # In the current implementation target_basin_membership_flag aliases nearest_cluster_in_target.
+    if "gate_route" in row and pd.notna(row.get("gate_route")):
+        return str(row["gate_route"])
+    exact_pass = bool(row.get("exact_pooled_cluster_pass", row.get("nearest_cluster_in_target", False)))
+    centroid_pass = bool(row.get("centroid_proximity_pass", row.get("target_centroid_distance_pass", False)))
     if exact_pass and centroid_pass:
-        return "exact_target_plus_centroid"
-    if exact_pass and basin_pass:
-        return "exact_target_only"
+        return "exact_plus_centroid"
+    if exact_pass:
+        return "exact_only"
     if centroid_pass:
         return "centroid_only"
-    if basin_pass:
-        return "broad_basin_only"
-    return "no_target_gate"
+    return "neither"
 
 
 def build_gate_route_tables(accepted_df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -370,8 +367,8 @@ def main() -> None:
             for k, v in Counter(pd.to_numeric(accepted_df["nearest_cluster_id"], errors="coerce").dropna().astype(int).tolist()).items()
         },
         "notes": [
-            "In the current manifest implementation, target_basin_membership_flag aliases nearest_cluster_in_target.",
-            "Therefore broad-basin-only gate routes are not distinguishable from exact-target routes in this run and centroid-only is the main non-exact accepted path.",
+            "Exact pooled-cluster membership and centroid proximity are reported as separate gate routes.",
+            "For legacy manifests, routes are backfilled from nearest_cluster_id and target_centroid_distance_pass; exact pooled membership remains the primary enrichment endpoint.",
         ],
         "output_files": {
             "accepted_full_review_sheet": str(accepted_review_path),
