@@ -1767,5 +1767,31 @@ Next required feasibility block:
 
 1. retain the fair matched-vanilla, privacy, and review artifacts as the formal baseline;
 2. refine privacy reporting to distinguish boilerplate overlap from material copying;
-3. construct a small, approved \textbf{source-fact-conditioned} generation/correction pilot using structured source facts rather than a source-free editor;
+3. construct a small, approved \textbf{three-arm source-fact-conditioned} pilot: raw ELM, source-fact-conditioned correction, and source-fact-only generation from the same verified ledger. This directly tests whether the ELM draft is a helpful scaffold or harmful narrative context;
 4. use source-paired factual preservation (diagnosis, procedures, complications, medication changes, disposition, unsupported claims, omissions) as the primary gate before any multi-region or cohort-scale enrichment work.
+
+## July 15 source-grounded rescue preparation
+
+Completed manual review files are now stored in `open-elm/cav_axis/docs` and were ingested into label-only derived outputs. The review-calibrated deterministic triage is supporting infrastructure only: it flags obvious defects but cannot certify semantic factuality.
+
+- A reproducible rescue-pilot anchor selector was added at `open-elm/cav_axis/source_grounded_rescue/build_rescue_pilot_anchor_manifest.py`.
+- It selected `45` distinct held-out cases from the completed source-paired review: `24` exact-pooled, `21` centroid-only, and `10` patient-disjoint. All had source-anchor loss in manual review, so the pilot tests the real failure mode rather than easy cases.
+- `build_source_fact_ledger.py` wrote a provisional ledger for all 45 cases: `406` source-cited facts. All are `pending` verification.
+- Automatic source-section extraction covered admission reason, sex, follow-up, and procedures in all cases, but found principal diagnosis in only `31/45` and hospital course in `33/45`; reviewers must verify, correct, and add required facts before any local generation/correction experiment.
+
+### Completed ledger review and validation
+
+- The completed portable review patch in `open-elm/cav_axis/docs/source_fact_ledger_review_patch_PORTABLE.csv` was applied only on approved storage with the new `apply_source_fact_ledger_review.py` utility.
+- The completed restricted ledger has `483` rows: `354` verified, `82` corrected, `47` rejected, and no pending rows. It includes `77` manually reviewed source-supported additions.
+- `validate_source_fact_ledger.py` reports all `45/45` cases ready for generation, complete required-field coverage, and `436/436` verified-or-corrected facts supported by the restricted source note after whitespace-normalized span checking.
+- A single empty original extracted value was safely recovered from its original source offsets during patch application; this was an extraction artifact, not a reviewer disagreement.
+
+Current blocker before the three-arm pilot:
+
+- choose an approved local model/checkpoint and local inference interface for fact-conditioned correction (arm B) and fact-only generation (arm C). Do not send source notes, ledgers, or outputs to a third-party API.
+
+New package boundary:
+
+- `open-elm/cav_axis/clinical_validation/`: secure manual-label ingestion and deterministic triage.
+- `open-elm/cav_axis/source_grounded_rescue/`: source-fact ledger schema, builder, validator, and local-only correction prompt.
+- No local editor model is configured yet; do not send source notes or ledgers to a third-party API.

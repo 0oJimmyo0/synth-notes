@@ -1,0 +1,124 @@
+{
+  "artifact_type": "portable_aggregate_review_qc",
+  "cases": 45,
+  "contains_clinical_fact_values": false,
+  "contains_source_note_text": false,
+  "field_review_counts": {
+    "admission_reason": {
+      "update_verified": 45
+    },
+    "demographics.sex": {
+      "update_verified": 45
+    },
+    "discharge_medications": {
+      "add_verified": 2,
+      "update_corrected": 24,
+      "update_verified": 20
+    },
+    "disposition": {
+      "add_verified": 1,
+      "update_corrected": 18,
+      "update_verified": 26
+    },
+    "follow_up": {
+      "add_verified": 45,
+      "update_rejected": 45
+    },
+    "hospital_course_events": {
+      "add_verified": 12,
+      "update_corrected": 21,
+      "update_verified": 12
+    },
+    "important_results": {
+      "update_verified": 23
+    },
+    "instructions": {
+      "add_verified": 1,
+      "update_corrected": 14,
+      "update_verified": 30
+    },
+    "principal_diagnosis": {
+      "add_verified": 16,
+      "update_corrected": 5,
+      "update_rejected": 2,
+      "update_verified": 24
+    },
+    "procedures_this_admission": {
+      "update_verified": 45
+    },
+    "secondary_diagnoses": {
+      "update_verified": 7
+    }
+  },
+  "final_ledger_rows_expected": 483,
+  "final_status_counts_expected": {
+    "corrected": 82,
+    "rejected": 47,
+    "verified": 354
+  },
+  "in_memory_validation": {
+    "checks": [
+      "all original rows reviewed exactly once",
+      "allowed final statuses only",
+      "corrected rows have source-derived manual_verified_value",
+      "unique fact_id values",
+      "source offsets are in range",
+      "verified/corrected values are supported by cited source spans",
+      "all six required fields covered in every case"
+    ],
+    "error_count": 0,
+    "passed": true
+  },
+  "original_ledger_rows": 406,
+  "patch_actions": {
+    "existing_rows_reviewed": 406,
+    "new_source_supported_rows_added": 77
+  },
+  "patch_reason_counts": {
+    "accurate_source_supported_extraction": 277,
+    "exclude_embedded_diagnosis_from_disposition": 1,
+    "misclassified_or_non_diagnostic": 2,
+    "missing_disposition_recovered_from_instruction": 1,
+    "missing_or_replacement_required_fact": 16,
+    "missing_required_fact_from_source": 13,
+    "no_discharge_medication_section_use_explicit_source_statement": 2,
+    "placeholder_not_usable": 45,
+    "remove_explicit_secondary_diagnoses": 5,
+    "restore_truncated_required_section": 76,
+    "source_supported_follow_up_rescue": 45
+  },
+  "project_validator_note": "validate_source_fact_ledger.py was not included in the uploaded files. Run it on the completed restricted ledger after applying this patch.",
+  "project_validator_run": false,
+  "required_field_coverage": {
+    "discharge_medications": {
+      "cases_covered": 45,
+      "minimum_usable_facts_per_case": 1,
+      "total_cases": 45
+    },
+    "disposition": {
+      "cases_covered": 45,
+      "minimum_usable_facts_per_case": 1,
+      "total_cases": 45
+    },
+    "follow_up": {
+      "cases_covered": 45,
+      "minimum_usable_facts_per_case": 1,
+      "total_cases": 45
+    },
+    "hospital_course_events": {
+      "cases_covered": 45,
+      "minimum_usable_facts_per_case": 1,
+      "total_cases": 45
+    },
+    "instructions": {
+      "cases_covered": 45,
+      "minimum_usable_facts_per_case": 1,
+      "total_cases": 45
+    },
+    "principal_diagnosis": {
+      "cases_covered": 45,
+      "minimum_usable_facts_per_case": 1,
+      "total_cases": 45
+    }
+  }
+}
