@@ -7,7 +7,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=32G
-#SBATCH --gres=gpu:a40:2
+#SBATCH --gres=gpu:a40:1
 #SBATCH --partition=gpu_devel
 
 set -euo pipefail

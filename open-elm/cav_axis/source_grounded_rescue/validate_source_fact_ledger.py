@@ -15,7 +15,7 @@ REQUIRED_FIELDS = {
     "principal_diagnosis", "hospital_course_events", "discharge_medications",
     "disposition", "follow_up", "instructions",
 }
-VALID_STATUSES = {"pending", "verified", "corrected", "rejected"}
+VALID_STATUSES = {"pending", "verified", "corrected", "omitted", "rejected"}
 
 
 def parse_args() -> argparse.Namespace:
@@ -23,6 +23,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--ledger_review_csv", required=True)
     parser.add_argument("--output_dir", required=True)
     parser.add_argument("--source_reference_csv", default=None, help="Optional restricted source-note reference for value-span support checks.")
+    parser.add_argument(
+        "--optional_fields",
+        default="",
+        help="Comma-separated fields permitted to be absent (for example follow_up).",
+    )
     return parser.parse_args()
 
 
@@ -32,6 +37,11 @@ def main() -> None:
     output_dir = Path(args.output_dir).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
     frame = pd.read_csv(review_path)
+    optional_fields = {value.strip() for value in args.optional_fields.split(",") if value.strip()}
+    unknown_optional = optional_fields.difference(REQUIRED_FIELDS)
+    if unknown_optional:
+        raise ValueError(f"--optional_fields contains non-required fields: {sorted(unknown_optional)}")
+    active_required_fields = REQUIRED_FIELDS.difference(optional_fields)
     needed = {"case_id", "field", "manual_verification_status"}
     missing = needed.difference(frame.columns)
     if missing:
@@ -50,8 +60,8 @@ def main() -> None:
             "n_facts": int(len(group)),
             "n_verified_or_corrected": int(len(verified)),
             "pending_or_rejected_facts": int((~group.manual_verification_status.isin(["verified", "corrected"])).sum()),
-            "missing_required_fields": "|".join(sorted(REQUIRED_FIELDS.difference(verified_fields))),
-            "ledger_ready_for_generation": not bool(REQUIRED_FIELDS.difference(verified_fields)),
+            "missing_required_fields": "|".join(sorted(active_required_fields.difference(verified_fields))),
+            "ledger_ready_for_generation": not bool(active_required_fields.difference(verified_fields)),
         })
     cases = pd.DataFrame(per_case)
     cases.to_csv(output_dir / "source_fact_ledger_case_readiness.csv", index=False)
@@ -79,7 +89,8 @@ def main() -> None:
         "status_counts": {key: int(value) for key, value in status_counts.items()},
         "ready_for_generation_count": int(cases.ledger_ready_for_generation.sum()) if len(cases) else 0,
         "ready_for_generation_rate": float(cases.ledger_ready_for_generation.mean()) if len(cases) else 0.0,
-        "required_fields": sorted(REQUIRED_FIELDS),
+        "required_fields": sorted(active_required_fields),
+        "optional_fields": sorted(optional_fields),
         "source_support": source_support,
     }
     (output_dir / "source_fact_ledger_validation_summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")

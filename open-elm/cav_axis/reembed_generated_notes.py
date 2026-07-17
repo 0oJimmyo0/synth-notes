@@ -104,15 +104,22 @@ def load_manifest(path: Path) -> pd.DataFrame:
     return pd.read_json(path, lines=True, dtype=False).reset_index(drop=True)
 
 
-def validate_manifest(df: pd.DataFrame, text_column: str) -> None:
-    required = ["generation_id", "dataset_row_id", text_column]
+def validate_manifest(df: pd.DataFrame, text_column: str) -> str:
+    """Validate either standard generation manifests or rescue manifests.
+
+    Standard Phase 1 generation emits ``generation_id``. The source-grounded
+    rescue workflow emits the equally stable ``rescue_id`` instead.
+    """
+    id_column = "generation_id" if "generation_id" in df.columns else "rescue_id"
+    required = [id_column, "dataset_row_id", text_column]
     missing = [col for col in required if col not in df.columns]
     if missing:
         raise ValueError(f"Manifest is missing required columns: {missing}")
     if df[text_column].isna().any():
         raise ValueError(f"Manifest contains null values in {text_column}")
-    if df["generation_id"].duplicated().any():
-        raise ValueError("Manifest contains duplicate generation_id values")
+    if df[id_column].duplicated().any():
+        raise ValueError(f"Manifest contains duplicate {id_column} values")
+    return id_column
 
 
 def encode_texts(
@@ -144,7 +151,7 @@ def main() -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     manifest_df = load_manifest(manifest_path)
-    validate_manifest(manifest_df, args.text_column)
+    id_column = validate_manifest(manifest_df, args.text_column)
 
     texts = manifest_df[args.text_column].fillna("").astype(str).tolist()
     embeddings, resolved_device = encode_texts(
@@ -169,6 +176,7 @@ def main() -> None:
         "output_path": str(output_path.resolve()),
         "metadata_output_path": str(metadata_output_path.resolve()),
         "manifest_rows": int(len(manifest_df)),
+        "manifest_id_column": id_column,
         "embedding_shape": list(embeddings.shape),
         "embedding_model_name": args.embedding_model_name,
         "embedding_device_requested": args.embedding_device,

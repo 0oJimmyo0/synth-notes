@@ -299,12 +299,13 @@ For cluster 29, the next concrete evaluation block is:
   \item keep `29/9/17/45` as the current candidate local basin, with `7` evaluated separately,
   \item freeze the 106-note closed-loop run and fair matched-vanilla comparison as a \textbf{negative clinical-faithfulness gate} plus a positive geometry-selection finding,
   \item correct privacy reporting so shared boilerplate is separated from material n-gram copying,
-  \item run a small \textbf{three-arm source-fact-conditioned feasibility study}: compare (A) raw ELM output, (B) local source-fact-conditioned correction of that output, and (C) local source-fact-only generation from the same verified ledger. This isolates whether the ELM draft is a useful clinical scaffold or harmful narrative context,
-  \item require improved diagnosis, procedure, complication, medication-change, and disposition preservation against the current near-zero baseline before considering a constrained editor or a larger candidate pool.
+  \item freeze the completed four-case source-fact-conditioned smoke as a method-selection experiment, not a precision estimate: \texttt{checkpoint-8215} fact-only was 4/4 rule-verified passes, whereas raw ELM and both raw-draft correction arms were 0/4,
+  \item run a prospective 30-case, one-shot \texttt{checkpoint-8215} fact-only replication with the existing raw ELM outputs as matched baseline and a prespecified 15-case untouched-backbone fact-only control,
+  \item require improved diagnosis, procedure, complication, medication-change, disposition, and source-faithfulness preservation before re-embedding clinically passing outputs for geometry or coverage analysis.
 \end{enumerate}
 
 \textbf{Current rescue-pilot preparation.}
-The completed manual labels have been ingested without copying source text into derived summaries. A reproducible 45-case held-out pilot cohort was selected across exact-pooled and centroid-only routes with 10 patient-disjoint cases. Manual ledger review transformed 406 provisional facts into a completed restricted ledger of 483 rows: 354 verified, 82 corrected, and 47 rejected, with 77 reviewed source-supported additions. All 45 cases now have verified/corrected coverage for the six required fields, and independent source-span validation is 100\% for the 436 usable facts. The next implementation dependency is an approved \textbf{local} model/interface for the correction and fact-only arms; no source-derived text may leave approved storage.
+The completed manual labels have been ingested without copying source text into derived summaries. A reproducible 45-case held-out pilot cohort was selected across exact-pooled and centroid-only routes with 10 patient-disjoint cases. Manual ledger review transformed 406 provisional facts into a completed restricted ledger of 483 rows: 354 verified, 82 corrected, and 47 rejected, with 77 reviewed source-supported additions. All 45 cases now have verified/corrected coverage for the six required fields, and independent source-span validation is 100\% for the 436 usable facts. The local initial backbone and \texttt{checkpoint-8215} text-generation paths both passed deterministic smoke tests. Only four cases currently have reviewer-approved compact generation values; the 30-case replication must prospectively freeze unused cases and complete the same concise generation-ledger review before any generation. No source-derived text may leave approved storage.
 
 \textbf{Functionality.}
 This stage turns the project from passive auditing into controlled enrichment.
@@ -321,7 +322,7 @@ This is the project's main methodological innovation, and it only counts as a su
 \end{itemize}
 
 \textbf{Current status.}
-The input-space axis, local-transport, and decoder-adaptation families are now \textbf{negative/partial findings}: they clarify decoder compatibility but do not support inference-time enrichment claims. Closed-loop output selection is a positive feasibility signal for final-output basin landing, but the completed clinical and source-paired reviews fail the source-faithfulness requirement. The next milestone is a three-arm source-fact-conditioned feasibility study, not another steering family, a larger candidate pool, or a downstream-NLP experiment.
+The input-space axis, local-transport, and decoder-adaptation families are now \textbf{negative/partial findings}: they clarify decoder compatibility but do not support inference-time enrichment claims. Closed-loop output selection is a positive feasibility signal for final-output basin landing, but the completed clinical and source-paired reviews fail the source-faithfulness requirement. The four-case source-grounded smoke selected \texttt{checkpoint-8215} fact-only generation, while raw-draft correction failed. The next milestone is a prospective 30-case one-shot factuality replication with a matched raw-ELM baseline and nested untouched-backbone control, not another steering family, geometry optimization, larger candidate pool, or downstream-NLP experiment.
 
 \subsection{Stage 4: Editing and downstream utility}
 
@@ -380,7 +381,22 @@ Coverage gains are off-manifold &
 %=============================================================================
 
 \noindent\textbf{Current working interpretation.}
-The baseline system is already established: vanilla generation, manifesting, leakage-aware auditing, and real-manifold mapping are complete. The active question is whether \textbf{target-specific steering} can improve coverage beyond matched vanilla and random-shift controls, and then whether later editing/evaluation improves note quality and clinical usefulness.
+The baseline system is established: vanilla generation, manifesting, leakage-aware auditing, and real-manifold mapping are complete. Phase 2 has two distinct findings. First, input-space steering and decoder-adaptation pilots did not reliably preserve sparse-region identity through decode--re-embed, so they are not reliable \emph{input-control} mechanisms. Second, closed-loop output-space selection did produce notes that land in the intended pooled sparse basin better than one-draw matched vanilla, establishing \emph{output-space geometry feasibility}. Its blinded review failed the separate clinical source-faithfulness gate. The active question is therefore whether a \textbf{source-grounded local decoder workflow} can preserve clinical facts while retaining this output-space enrichment capability.
+
+The prospective 30-case fact-only replication resolves the factuality half of this question: all primary checkpoint outputs passed the blinded factual gate. However, the subsequent paired geometry audit shows that factual fact-only notes retain the pooled basin in only 30.0\% of cases overall and 14.3\% of patient-disjoint cases, versus 50.0\% and 100\%, respectively, for the frozen \emph{closed-loop-selected} raw ELM comparator. The latter is not a one-draw vanilla baseline and remains clinically unacceptable. Thus clinical factuality and output-space geometry remain separate requirements. The next bounded bridge is multi-candidate, fact-ledger-conditioned generation followed by final-output basin selection and a new blinded factual review of the selected notes.
+
+The first eight-anchor bridge pilot generated four sampled fact-only candidates per anchor. All 32 candidates were complete and non-empty; 50.0\% landed in the pooled basin, and selecting one output per anchor by final BGE basin score yielded 5/8 (62.5\%) pooled-basin landing, including three patient-disjoint cases. All eight selected notes subsequently passed blinded ledger-grounded factual review (zero unsupported-major claims and zero critical omissions; mean factual faithfulness 4.75/5). This establishes dual-gate feasibility, not scale-up readiness. The next confirmatory step is the existing 30-anchor reviewed cohort with four candidates per anchor, final-output selection, and blinded review of all 30 selected notes.
+
+The 30-anchor confirmation generated 120 sampled fact-only candidates. Candidate pooled-basin landing was 35.0\%; selecting one candidate per anchor by final BGE score yielded 16/30 (53.3\%) pooled-basin landing, split evenly across exact-pooled and centroid-only strata. The selected cohort is technically complete (all outputs non-empty and EOS-terminated) and retains all seven patient-disjoint anchors, although only two patient-disjoint outputs land in the basin. Blinded factual review of the 30 selected notes is now the decisive gate before a second-region pilot or any cohort-scale claim.
+
+The expanded blinded review passed in 28/30 cases (93.3\%), with mean factual faithfulness 4.63/5. Fifteen notes (50.0\% of anchors) jointly passed the factual rule and landed in the pooled basin; all seven patient-disjoint anchors passed factual review, with two dual-gate successes. The two failures were medication-reconciliation errors rather than a broad factuality failure. The frozen result is not retrospectively edited. Future prompts include an explicit ledger-only, non-contradictory medication-list rule. The next stage is a preregistered second-region replication under the same generation, final-output selection, blinded factual review, and leakage-aware reporting protocol.
+
+The first prospective second-region eligibility screen (cluster 20) showed why factual-ledger completeness must precede generation. Of 30 reviewed anchors, only 13 retained all core verified facts after allowing unsupported follow-up to remain absent; the other 17 lacked a verified diagnosis, hospital course, instructions, or disposition. These anchors are excluded rather than filled with invented content. Cluster 20 is therefore frozen as a source-grounding eligibility limitation, and the next preregistered second-region candidate is the clinically distinct surgery-enriched cluster 36.
+
+Cluster 36 exposed a second source-grounding limitation: follow-up sections were placeholder-only and most instruction sections were incomplete fragments. This was confirmed by a restricted aggregate extraction audit rather than assumed from model output. The project will not relabel these fields as present or generate from incomplete ledgers. The next redesign is a source-eligibility pre-screen over the full candidate region, selecting only anchors with complete non-placeholder source support before manual ledger review. Thus source-document completeness becomes an explicit feasibility criterion alongside embedding-region sparsity and leakage status.
+
+\noindent\textbf{Revised mechanism and claim boundary.}
+The project no longer claims that an inference-time edited embedding is reliably decoded into a faithful sparse-region note. Instead, embedding-space analysis identifies under-covered real-note regions and selects held-out anchors; a verified compact fact ledger supports local fact-conditioned synthesis; blinded factual review gates note validity; and only clinically passing notes are re-embedded to audit whether the final output enriches the intended real manifold. This preserves the cohort-enrichment objective while separating anchor selection, factual control, and output-space evaluation.
 
 \begin{table}[h]
 \centering
@@ -403,7 +419,8 @@ Real-vs-synthetic coverage mapping & \textbf{Done for vanilla baseline} & Use th
 Subgroup metadata build & \textbf{Done} & Join subgroup fields into future coverage and CAV reports \\
 First global-axis CAV pilots + controls & \textbf{Done} & Keep as diagnostic evidence, not yet a scale-up mechanism \\
 Inference-time steering + decoder adaptation & \textbf{Frozen negative/partial} & Report decoder compatibility as the limiting mechanism; do not add another heuristic steering family \\
-Closed-loop output-space enrichment & \textbf{Active validation} & Compare 106 strict accepted notes against same-anchor 8192-token vanilla and blinded clinical/source-faithfulness review \\
+Closed-loop output-space enrichment & \textbf{Positive basin-landing feasibility; clinical gate failed} & Retain the 106-note result and same-anchor 8192-token control as the geometry baseline; do not claim clinically usable enrichment yet \\
+Source-grounded decoder rescue & \textbf{Prospective 30-case replication preparation} & The 4/4 fact-only smoke selects the method but has wide uncertainty; retain raw ELM baseline, freeze draft-correction arms, and test a prespecified replication \\
 LLM editor / external reference / NER & Phase 3 & Start only after clinically credible closed-loop enrichment or a validated quality-control/editor strategy \\
 \bottomrule
 \end{tabularx}
@@ -439,11 +456,15 @@ LLM editor / external reference / NER & Phase 3 & Start only after clinically cr
 \textbf{Stage 3 near-term redesign checklist.}
 \begin{itemize}[nosep]
   \item Freeze input-space steering, projection, and decoder-adaptation families as negative/partial results.
-  \item Generate the one-draw, default-prompt 8192-token matched vanilla control on the 106 frozen accepted anchors.
-  \item Run anchor-level paired analysis of basin landing, source cosine, completion, quality, and privacy-risk flags.
-  \item Complete blinded clinical and source-faithfulness review, including accepted, near-miss, and matched-vanilla notes.
-  \item Use the observed error categories to choose a clinical reranker or constrained repair/editor before any scale-up.
+  \item Retain the completed one-draw, default-prompt 8192-token matched vanilla control and paired review as the fair reference.
+  \item Use a reviewed compact fact ledger without source spans as the sole factual authority for a local two-arm decoder smoke test: raw-draft correction and fact-only generation.
+  \item Compare the untouched local backbone and \texttt{checkpoint-8215}; record model condition, ledger hash, raw-draft provenance, and token stopping metadata. The four-case smoke completed with 16 non-empty EOS-terminated B/C outputs and a blinded five-condition review pack.
+  \item The blinded result selected \texttt{checkpoint-8215} fact-only generation: 4/4 passes, no unsupported major claims, and no critical omissions. This is a method-selection signal with wide four-case uncertainty, not evidence of near-perfect performance. Raw ELM and both draft-correction arms were 0/4 passes, so the untrusted draft is not retained as conditioning context.
+  \item Run a prospective 30-case replication of the selected fact-only arm with raw ELM baseline, reviewer-approved compact ledgers, and blinded factual review. A nested 15-case untouched-backbone control is frozen before generation. Gate any further expansion on replication of factual preservation, unsupported-claim rate, critical omission rate, and clinically usable section coverage; evaluate geometry only after that gate passes.
 \end{itemize}
+
+\textbf{Replication decision rule.}
+The 30 primary outputs and 15 nested controls completed blinded review. The primary \texttt{checkpoint-8215} fact-only arm met the predeclared factual gate (30/30 passes; zero unsupported-major-claim and critical-omission failures; all seven patient-disjoint cases passed), so post-review BGE re-embedding is approved as a pilot. The matched raw ELM baseline was 0/30 passes. The untouched-backbone subset was 15/15 passes, so the current result supports verified-fact-conditioned generation but does not establish a checkpoint advantage over the untouched backbone. Geometry analysis remains a 30-case pilot and must not be presented as cohort-wide enrichment without replication.
 
 \textbf{Stage 4 success.}
 \begin{itemize}[nosep]

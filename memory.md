@@ -1790,6 +1790,119 @@ Current blocker before the three-arm pilot:
 
 - choose an approved local model/checkpoint and local inference interface for fact-conditioned correction (arm B) and fact-only generation (arm C). Do not send source notes, ledgers, or outputs to a third-party API.
 
+### July 15 generation-ledger completion and next smoke test
+
+- The reviewer-completed prompt-safe generation ledger is stored in `open-elm/cav_axis/docs/generation_ledger_smoke_review_completed_RESTRICTED.csv`.
+- `build_generation_ledger.py` produced `generation_ledgers.jsonl` for four source-paired pilot cases: `38` reviewed fact values, with no source-note spans or source text in the serialized generation input.
+- All four ledger anchors join uniquely to the frozen `106`-note accepted raw-ELM manifest. The ledger records only `fact_id`, `field`, and approved `generation_value`.
+- The local ordinary-text generation path passed a deterministic smoke test for both the untouched initial ELM backbone and PEFT `checkpoint-8215`: exact expected phrase, EOS termination, no prompt echo, and no output-cap hit.
+- The next required experiment is a local four-case, two-arm, two-model-condition smoke test, not cohort scale-up:
+  - raw-ELM-draft correction using verified facts as the sole factual authority;
+  - fact-only generation using the same verified ledger;
+  - each under untouched backbone and `checkpoint-8215`.
+- The smoke manifest must retain model condition, arm, compact-ledger hash, raw candidate id, token count, EOS/cap flags, and generated text. Its primary evaluation is blinded source-paired factual preservation; basin geometry is secondary until factual preservation is acceptable.
+
+### July 15 four-case rescue smoke completed
+
+- Local Slurm job `2121068` completed the planned four-case rescue smoke: `16/16` B/C outputs across the untouched backbone and `checkpoint-8215`.
+- All rescue outputs were non-empty, EOS-terminated, below the `3072` token cap, uniquely identified, and carried both ledger-hash and correction-draft provenance.
+- `build_source_grounded_review_pack.py` created a blinded ledger-grounded review set with `20` notes: raw ELM baseline plus four B/C model-condition outputs for each of four cases.
+- Review file: `.../four_case_text_smoke_v1/blinded_review_pack/source_grounded_blinded_review.csv`; keep `source_grounded_blinded_key.csv` separate until review labels are final.
+- Next decision gate: compare factual support, unsupported major claims, critical omissions, and clinical usability across conditions. Do not expand the 45-case pilot or resume enrichment scale-up until this review identifies a condition that improves over raw ELM.
+
+### July 16 four-case blinded rescue result
+
+- The completed review was ingested and unblinded with `analyze_source_grounded_review.py`. All `20` rows satisfied the predeclared pass-rule validation.
+- Overall: `7/20` passes, `12/20` unsupported-major-claim rate, and `13/20` critical-omission rate.
+- Condition result (four cases each):
+  - `checkpoint_8215__fact_only`: `4/4` passes, zero unsupported-major claims, zero critical omissions, mean factual-faithfulness `4.75/5`.
+  - `untouched_backbone__fact_only`: `3/4` passes, zero unsupported-major claims, one critical omission, mean factual-faithfulness `3.75/5`.
+  - both correction arms and raw ELM baseline: `0/4` passes, unsupported-major-claim rate `1.0`, critical-omission rate `1.0`.
+- Interpretation: the untrusted raw ELM draft is harmful context in this setting. The viable candidate is fact-only generation using reviewed ledger values with `checkpoint-8215`.
+- Next experiment: a bounded, pre-specified 20--30 case replication of `checkpoint_8215__fact_only`, with the same ledger verification and blinded factual review. Keep raw ELM as a baseline for each case; drop correction arms unless a separate draft-grounding mechanism is developed.
+
+### July 16 replication-design correction
+
+- The 4/4 result is a condition-specific method-selection signal, not proof of near-perfect performance; its exact 95\% confidence interval is wide (approximately 40\%--100\%). The pooled 7/20 result is not an estimate for the selected condition because it combines distinct arms.
+- Freeze a prospective 30-case replication from the 41 unused verified-ledger cases. Selection must be stratified across exact-pooled/centroid-only routes, patient-disjoint/overlap status, clinical domains, and ledger complexity; it must not select apparent easy cases.
+- Primary condition: one deterministic `checkpoint-8215` fact-only output from a reviewer-approved compact ledger, without raw draft, retries, manual prompt edits, candidate selection, or geometry optimization.
+- Main baseline: existing matched raw ELM note. Secondary prespecified control: untouched-backbone fact-only on a nested 15-case subset, testing whether checkpoint training adds value beyond the verified ledger.
+- Predeclared feasibility thresholds for the primary 30 cases: proceed at >=27/30 passes, <=2 unsupported-major-claim failures, <=2 critical-omission failures, no systematic medication/procedure/disposition failure, and acceptable patient-disjoint performance. A 24--26/30 result triggers revision; <24/30 stops whole-note fact-only scale-up.
+- The current full 45-case source ledger is verified but only the smoke four have reviewer-approved concise `generation_value`s. The remaining replication cases must complete this compact-ledger review before generation; raw source spans must never enter prompts.
+- A prospective 30-case candidate manifest and restricted concise-ledger review template were prepared at `.../source_grounded_rescue/fact_only_replication_30_v1/`. It excludes all four smoke anchors and contains 15 exact-pooled plus 15 centroid-only cases, seven patient-disjoint cases, and 292 usable fact rows requiring reviewer-approved concise values.
+- The available unused target-pool cases are intrinsically service-skewed (37 medicine, 4 surgery); the 30-case candidate set includes three surgery cases. Report this as target-region composition rather than implying a service-balanced cohort.
+
+### July 16 30-case ledger readiness completed
+
+- The completed restricted review is in `open-elm/cav_axis/docs/fact_only_replication_30_review_completed_RESTRICTED.csv`: 30 cases, 292 reviewed rows, 212 verified, 57 corrected, and 23 omitted.
+- `build_generation_ledger.py` validated and serialized the prompt-safe primary ledger: 30 unique cases/anchors and 269 non-empty reviewed facts. It contains no source spans, phone-number patterns, exact numeric dates, or blank usable fact values.
+- No generation has started. The only valid next generation condition is one deterministic `checkpoint-8215` fact-only output for each of these 30 frozen ledgers.
+- The untouched-backbone fact-only nested control was frozen pre-generation at `.../fact_only_replication_30_v1/nested_backbone_control_15_v1/`: 15 cases, 8 exact-pooled, 7 centroid-only, and 4 patient-disjoint, selected by fixed hash seed `20260716`.
+- `subset_generation_ledger.py` created the prompt-safe 15-case control ledger (134 facts) from the frozen primary ledger. `source_grounded_fact_only.slurm` is the generic one-A40 deterministic launcher for each separately named condition. Both launcher and ledger subset passed Python/shell preflight; generation remains unstarted at this checkpoint.
+
+### July 16 prospective generation completed; review gate pending
+
+- The deterministic primary and control jobs completed cleanly: 30 `checkpoint-8215` fact-only outputs and 15 untouched-backbone fact-only outputs, all non-empty, EOS-terminated, under the 3072-token cap, and uniquely identified.
+- A blinded restricted review pack is ready at `.../fact_only_replication_30_v1/blinded_review_pack/`: 75 outputs (30 matched raw ELM baselines, 30 primary checkpoint fact-only, 15 nested untouched-backbone fact-only). The condition key must remain unopened until labels are final.
+- Current phase: prospective clinical-factual validation. No re-embedding, geometry analysis, coverage claim, or scale-up is allowed until the primary 30-case blinded review meets its predeclared feasibility thresholds.
+- Defensible project mechanism: real-embedding manifold analysis identifies under-covered anchor regions; verified compact facts supply factual control; blinded review establishes validity; only passing outputs are re-embedded to evaluate output-space enrichment. This is distinct from, and more defensible than, a claim of reliable direct embedding-to-note inversion.
+
+### Terminology correction: Phase 2 is not a single failure
+
+- Input-space CAV/local transport and decoder adaptation are negative/partial findings: they do not reliably control the final decoded embedding.
+- Closed-loop output-space selection is a positive geometry-feasibility finding: some generated notes did land in the pooled sparse basin and improved basin landing versus fair one-draw matched vanilla.
+- The 106-note closed-loop condition failed the separate clinical source-faithfulness gate. The current source-grounded replication is intended to repair this clinical-validity bottleneck, after which clinically passing notes can be re-embedded to test whether geometry/enrichment is retained.
+
+### July 16 30-case blinded factual replication result
+
+- The 75-note blinded review unblinded cleanly, with all reviewer pass/fail values matching the predeclared rule. The second reviewer independently completed 24 overlapping blinded outputs with 100% exact agreement across recorded labels; retain both files for audit rather than treating this small agreement subset as a population estimate.
+- Primary `checkpoint_8215_fact_only`: `30/30` passes, zero unsupported-major-claim and critical-omission failures, mean factual-faithfulness `4.97/5`; all `7/7` patient-disjoint cases passed.
+- Matched raw ELM baseline: `0/30` passes, unsupported-major-claim and critical-omission rates both `1.0`.
+- Nested untouched-backbone fact-only control: `15/15` passes. Therefore the current evidence supports the reviewed fact ledger plus fact-only generation mechanism; it does not establish that the ELM checkpoint is superior to the untouched backbone for this text-conditioned task.
+- The primary factual gate manifest was frozen with all 30 passing outputs. The next approved action is BGE re-embedding of this factual-gated cohort, followed by a pilot geometry comparison against matched raw ELM and real source embeddings. Do not make cohort-scale enrichment claims from 30 cases.
+- The first factual-gated re-embedding submission failed before inference because the generic utility required `generation_id`, while source-grounded manifests use stable `rescue_id`. `reembed_generated_notes.py` now accepts either identifier, records the identifier column in metadata, and preflight confirms all 30 factual-gated rows have unique rescue IDs, nonempty text, and dataset row IDs. Rerun is required; no BGE matrix was written by the failed job.
+- The rerun completed successfully (`2124949`): the factual-gated checkpoint fact-only matrix is `30 x 1024`, row-aligned to the 30 factual-gate-passing manifest rows, finite, and L2-normalized (mean norm `1.0`). BGE model is `BAAI/bge-large-en-v1.5` on CUDA. It is now valid for the bounded post-review geometry comparison; it is not yet a cohort-scale coverage result.
+
+## July 16 post-review paired geometry audit: clinical fidelity and basin retention remain separate gates
+
+- The 30 factual-gated `checkpoint-8215` fact-only notes were compared with the same anchors' frozen closed-loop-selected raw ELM outputs against the fixed Phase 1 real-test clusters and pooled basin `9/17/29/45`.
+- The fact-only condition is clinically successful but has weaker geometry: mean source-output cosine `0.7723`, pooled-basin retention `30.0%` overall and `14.3%` among seven patient-disjoint rows, and mean target-centroid distance change `+0.1288`.
+- The frozen raw comparator has stronger geometry (`50.0%` pooled-basin retention; `100%` among the seven patient-disjoint rows), but it is the earlier closed-loop-selected raw output rather than a one-draw vanilla baseline and failed factual review. It must be called a selected raw-ELM comparator, not a vanilla comparator.
+- Therefore do not scale the current deterministic fact-only procedure as sparse-region enrichment yet. The next bounded bridge is four sampled fact-only candidates per frozen anchor, BGE re-embedding of every candidate, transparent selection by final pooled-basin landing, and a new blinded factual review of selected notes. The objective is dual success: source-grounded factual validity plus final-output basin retention.
+
+## July 16 fact-only geometry bridge: dual-gate feasibility success, expanded confirmation next
+
+- On a frozen eight-anchor bridge pilot with four sampled `checkpoint-8215` fact-only candidates per anchor, all 32 candidates were non-empty, unique, and EOS-terminated without cap hits.
+- Candidate pooled-basin landing was `16/32` (50.0%). Final-output selection retained one note per anchor and increased pooled-basin landing to `5/8` (62.5%), with three patient-disjoint selected cases.
+- Blinded ledger-grounded review of all eight selected notes passed: `8/8` rule-verified passes, zero unsupported-major claims, zero critical omissions, and mean factual faithfulness `4.75/5`. This is the first dual-gate feasibility result: fact-ledger-conditioned candidate generation plus final-output selection can produce clinically factual notes while achieving pooled-basin landing in this small pilot.
+- The result remains an eight-case feasibility signal, not a cohort-scale result. The next confirmation is the existing 30 reviewed-anchor cohort with four candidates per anchor, followed by BGE selection and blinded review of all 30 selected outputs. The 32-candidate bridge required `8m15s` on one A40, so the 120-candidate confirmation is operationally suitable for the six-hour A40 limit.
+
+## July 16 30-anchor fact-only geometry bridge: geometry replication, factual review pending
+
+- The frozen 30-anchor cohort produced 120 sampled fact-only candidates (four per anchor). Candidate pooled-basin landing was `42/120` (35.0%); final-output selection increased this to `16/30` (53.3%), exactly eight selected target-basin outputs in each `exact_pooled` and `centroid_only` stratum.
+- All 30 selected notes are non-empty, EOS-terminated, and below the generation cap. The selected cohort includes all seven patient-disjoint anchors, of which two land in the pooled basin.
+- The blinded 30-note ledger-grounded factual review pack is prepared at `.../fact_only_geometry_bridge_30x4_v1/blinded_review_pack/`. This is now the decisive confirmation gate. Do not make multi-region or cohort-scale claims until completed labels establish factual validity of the selected notes.
+
+## July 16 30-anchor geometry bridge: expanded dual-gate confirmation
+
+- The annotated blinded review completed with `28/30` rule-verified factual passes (93.3%), two unsupported-major-claim failures (6.7%), one critical-omission failure (3.3%), and mean factual faithfulness `4.63/5`.
+- Joining blinded labels to the protected geometry key gives `15/30` clinically passing, pooled-basin-selected notes (50.0%). Of seven patient-disjoint anchors, all seven pass factual review and two are dual-gate successes. The target-cluster distribution among target selected notes is `9: 5/5 factual passes`, `17: 3/4`, `29: 5/5`, and `45: 2/2`.
+- The two failures are localized medication-reconciliation errors: contradictory continue/discontinue status and duplicated/unsupported malformed respiratory medication. The frozen result is retained unchanged; future source-grounded prompts explicitly require one ledger-only, non-contradictory medication list. This is a prompt safety refinement, not retrospective repair.
+- The project has now passed a 30-anchor dual-gate confirmation for the `9/17/29/45` basin. Next: objectively choose and preregister a second clinically coherent under-covered basin, then repeat the same 30-anchor, four-candidate, select--review protocol. Full-cohort scale-up and LLM editing remain deferred until multi-region replication.
+
+## July 17 second-region eligibility screen: cluster 20 is not generation eligible at the planned sample size
+
+- A deterministic 30-anchor cluster-20 cohort (eight patient-disjoint) was frozen and its 268 provisional facts reviewed. The review has 183 corrected, 41 verified, and 44 omitted facts.
+- Follow-up is legitimately optional when unsupported because the fact-only prompt omits absent details. With follow-up excluded from the required contract, only `13/30` anchors retain all core verified fields: principal diagnosis, hospital course, discharge medications, disposition, and instructions.
+- Do not generate from the remaining 17 anchors and do not weaken the core-fact gate. This is a source-grounding eligibility failure, not an ELM failure. It establishes that target-region selection must include factual-ledger completeness before a region enters generation.
+- Retarget the second-region replication to cluster 36, a clinically distinct surgery-enriched region in the existing enrichment analysis. Build and review its provisional ledger before candidate generation.
+
+## July 17 cluster 36 extraction audit: six-field source grounding is not currently viable for the sampled cohort
+
+- The 30-anchor cluster-36 review has 37 verified, 171 corrected, and 86 omitted provisional facts. Reviewers correctly omitted placeholder follow-up and incomplete instruction fragments rather than guessing values.
+- Restricted extraction audit confirms this is not merely an alias failure: follow-up was found in all 30 source notes but was placeholder-only in all 30; instructions were found in all 30 but fragment-like in 28. Only two sampled anchors retained all six likely core fields after review.
+- Do not generate cluster-36 fact-only notes with the current six-field ledger contract and do not simply mark instructions optional. The next technical redesign is a source-eligibility pre-screen across a full target region, selecting only anchors with non-placeholder, complete source evidence before manual fact review. This source-availability gate must be added before future target-region generation.
+
 New package boundary:
 
 - `open-elm/cav_axis/clinical_validation/`: secure manual-label ingestion and deterministic triage.

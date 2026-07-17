@@ -46,6 +46,19 @@ class LlamaForEmbeddingLM(LlamaForCausalLM):
         domain_embeddings=None,
         **kwargs
     ):
+        # Preserve ordinary causal-LM behavior for source-fact text prompting.
+        # The adapter is only needed when a domain embedding is supplied.
+        if domain_embeddings is None or len(domain_embeddings) == 0:
+            return super().forward(
+                *args,
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                **kwargs,
+            )
+
+        if input_ids is None:
+            raise ValueError("input_ids are required when domain_embeddings are supplied")
+
         # start with embedding input_ids 
         embs = self.model.embed_tokens(input_ids)
         
@@ -83,14 +96,18 @@ class LlamaForEmbeddingLM(LlamaForCausalLM):
                 embs = embs.clone()
                 embs[emb_token_mask] = adapted_embs
         
-        kwargs['inputs_embeds']=embs
-        kwargs['input_ids']=None
         # pass the modified embeddings to the parent class's forward function
         # this allows we 
         # -> pass the modified embeddings through transformer layers
         # -> apply language modeling head
         # -> generate output
-        return super().forward(*args, **kwargs)
+        return super().forward(
+            *args,
+            input_ids=None,
+            inputs_embeds=embs,
+            attention_mask=attention_mask,
+            **kwargs,
+        )
 
     def prepare_inputs_for_generation(
         self,
@@ -102,7 +119,8 @@ class LlamaForEmbeddingLM(LlamaForCausalLM):
     ):
         output = super().prepare_inputs_for_generation(*args, **kwargs)
         # ensure that domain embeddings are passed through each generation step
-        output.update({"domain_embeddings": domain_embeddings})
+        if domain_embeddings is not None:
+            output.update({"domain_embeddings": domain_embeddings})
         # this output will be used in forward function
         return output
 
