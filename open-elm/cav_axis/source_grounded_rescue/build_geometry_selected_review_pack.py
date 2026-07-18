@@ -19,6 +19,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--selected_manifest_path", required=True)
     parser.add_argument("--output_dir", required=True)
     parser.add_argument("--seed", type=int, default=20260716)
+    parser.add_argument("--document_type", default="complete_discharge_summary")
+    parser.add_argument("--optional_fields", default="")
+    parser.add_argument("--allow_selected_subset", action="store_true", help="Permit output filtering to leave some frozen anchors unselected.")
     return parser.parse_args()
 
 
@@ -40,7 +43,11 @@ def main() -> None:
         raise ValueError("Selected manifest must contain one unique output per case.")
     if selected["generated_text"].isna().any() or selected["generated_text"].astype(str).str.strip().eq("").any():
         raise ValueError("Selected manifest contains empty generated text.")
-    if set(selected["case_id"].astype(str)) != set(ledger_by_case):
+    selected_cases = set(selected["case_id"].astype(str))
+    ledger_cases = set(ledger_by_case)
+    if not selected_cases.issubset(ledger_cases):
+        raise ValueError("Selected manifest includes cases absent from the frozen generation ledger.")
+    if not args.allow_selected_subset and selected_cases != ledger_cases:
         raise ValueError("Selected manifest cases do not exactly match the frozen generation ledger.")
 
     review_rows, key_rows = [], []
@@ -54,6 +61,8 @@ def main() -> None:
                 "case_id": case_id,
                 "review_stratum": ledger.get("review_stratum"),
                 "patient_disjoint_from_train": ledger.get("patient_disjoint_from_train"),
+                "document_type": args.document_type,
+                "optional_fields": args.optional_fields,
                 "verified_fact_ledger": json.dumps(ledger["facts"], ensure_ascii=True, indent=2),
                 "synthetic_note": row["generated_text"],
                 **{field: "" for field in REVIEW_FIELDS},
@@ -73,6 +82,8 @@ def main() -> None:
                 "output_cluster_id": row.get("output_cluster_id"),
                 "output_in_target_basin": row.get("output_in_target_basin"),
                 "target_basin_margin": row.get("target_basin_margin"),
+                "document_type": args.document_type,
+                "optional_fields": args.optional_fields,
             }
         )
     order = list(range(len(review_rows)))
@@ -87,6 +98,11 @@ def main() -> None:
         "n_cases": int(len(review_df)),
         "n_target_basin_selected": int(key_df["output_in_target_basin"].sum()),
         "review_rule": "pass only when no unsupported major claim, no critical omission, and both factual faithfulness and clinical consistency are at least 4",
+        "document_type": args.document_type,
+        "optional_fields": [value.strip() for value in args.optional_fields.split(",") if value.strip()],
+        "frozen_ledger_cases": int(len(ledger_cases)),
+        "selected_case_count": int(len(selected_cases)),
+        "unselected_case_count": int(len(ledger_cases.difference(selected_cases))),
         "security_note": "Review CSV contains compact verified facts and synthetic notes only; keep the condition/geometry key blinded until labels are final.",
     }
     (output_dir / "geometry_selected_fact_only_review_summary.json").write_text(json.dumps(summary, indent=2) + "\n")

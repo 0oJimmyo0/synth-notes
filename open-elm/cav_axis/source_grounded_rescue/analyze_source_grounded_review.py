@@ -62,7 +62,7 @@ def main() -> None:
         merged[column] = normalize_yes_no(merged[column], column)
     for column in SUPPORT_COLUMNS:
         allowed = {"yes", "no"}
-        if column == "major_procedures_supported_yes_no_not_applicable":
+        if column in {"major_procedures_supported_yes_no_not_applicable", "follow_up_supported_yes_no"}:
             allowed.add("not_applicable")
         value = merged[column].fillna("").astype(str).str.strip().str.lower()
         invalid = set(value).difference(allowed)

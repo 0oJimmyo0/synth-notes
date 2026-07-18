@@ -19,7 +19,8 @@ CHECKPOINT_PATH=${CHECKPOINT_PATH:-$DATAHOME/elm_training_outputs/filtered_train
 : "${GENERATION_LEDGER_PATH:?Set GENERATION_LEDGER_PATH to a prompt-safe JSONL ledger}"
 : "${OUTPUT_DIR:?Set OUTPUT_DIR}"
 : "${MODEL_CONDITION:?Set MODEL_CONDITION to checkpoint_8215 or untouched_backbone}"
-RAW_ELM_MANIFEST_PATH=${RAW_ELM_MANIFEST_PATH:-$RUN/closed_loop_accepted_manifest.jsonl}
+RAW_ELM_MANIFEST_PATH=${RAW_ELM_MANIFEST_PATH:-}
+DOCUMENT_TYPE=${DOCUMENT_TYPE:-complete_discharge_summary}
 MAX_NEW_TOKENS=${MAX_NEW_TOKENS:-3072}
 OUTPUT_STEM=${OUTPUT_STEM:-source_grounded_fact_only}
 N_CANDIDATES_PER_CASE=${N_CANDIDATES_PER_CASE:-1}
@@ -32,9 +33,12 @@ if [[ "$MODEL_CONDITION" != "checkpoint_8215" && "$MODEL_CONDITION" != "untouche
   echo "ERROR: MODEL_CONDITION must be checkpoint_8215 or untouched_backbone" >&2
   exit 1
 fi
-for required in "$SCRIPT_PATH" "$BACKBONE_PATH" "$GENERATION_LEDGER_PATH" "$RAW_ELM_MANIFEST_PATH"; do
+for required in "$SCRIPT_PATH" "$BACKBONE_PATH" "$GENERATION_LEDGER_PATH"; do
   [[ -e "$required" ]] || { echo "ERROR: required path does not exist: $required" >&2; exit 1; }
 done
+if [[ "${ARMS:-fact_only}" == *correction* ]]; then
+  [[ -n "$RAW_ELM_MANIFEST_PATH" && -e "$RAW_ELM_MANIFEST_PATH" ]] || { echo "ERROR: correction arm requires RAW_ELM_MANIFEST_PATH" >&2; exit 1; }
+fi
 if [[ "$MODEL_CONDITION" == "checkpoint_8215" ]]; then
   [[ -d "$CHECKPOINT_PATH" ]] || { echo "ERROR: checkpoint directory does not exist: $CHECKPOINT_PATH" >&2; exit 1; }
 fi
@@ -57,10 +61,10 @@ cd "$OPEN_ELM_DIR"
 
 cmd=(python -u "$SCRIPT_PATH"
   --generation_ledger_path "$GENERATION_LEDGER_PATH"
-  --raw_elm_manifest_path "$RAW_ELM_MANIFEST_PATH"
   --backbone_path "$BACKBONE_PATH"
   --model_condition "$MODEL_CONDITION"
-  --arms fact_only
+  --arms "${ARMS:-fact_only}"
+  --document_type "$DOCUMENT_TYPE"
   --output_dir "$OUTPUT_DIR"
   --output_stem "$OUTPUT_STEM"
   --device cuda
@@ -71,6 +75,9 @@ cmd=(python -u "$SCRIPT_PATH"
   --top_p "$TOP_P")
 if [[ "$DO_SAMPLE" == "1" ]]; then
   cmd+=(--do_sample)
+fi
+if [[ -n "$RAW_ELM_MANIFEST_PATH" ]]; then
+  cmd+=(--raw_elm_manifest_path "$RAW_ELM_MANIFEST_PATH")
 fi
 if [[ "$MODEL_CONDITION" == "checkpoint_8215" ]]; then
   cmd+=(--checkpoint_path "$CHECKPOINT_PATH")

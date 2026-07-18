@@ -1903,6 +1903,66 @@ Current blocker before the three-arm pilot:
 - Restricted extraction audit confirms this is not merely an alias failure: follow-up was found in all 30 source notes but was placeholder-only in all 30; instructions were found in all 30 but fragment-like in 28. Only two sampled anchors retained all six likely core fields after review.
 - Do not generate cluster-36 fact-only notes with the current six-field ledger contract and do not simply mark instructions optional. The next technical redesign is a source-eligibility pre-screen across a full target region, selecting only anchors with non-placeholder, complete source evidence before manual fact review. This source-availability gate must be added before future target-region generation.
 
+## July 17 bounded cluster-36 evidence recovery audit: worth trying, insufficient for complete-note replication
+
+- The mentor-proposed full-note recovery audit was implemented with restricted provenance-aware outputs, plus `admissions.discharge_location` as a structured disposition candidate. It recovered substantive follow-up evidence in `13/30` cases versus the original placeholder-only extraction, but substantive instruction evidence in only `3/30`; `admissions` supplied a disposition candidate in `28/30` cases.
+- This demonstrates that high-recall full-note recovery is useful as an eligibility screen, but structured augmentation cannot safely replace unsupported personalized instructions. Diagnoses, procedures, and medication orders remain corroboration-only, not automatic ledger facts.
+- Cluster 36 remains ineligible for a 30-case complete-discharge replication. Preserve it for manifold/eligibility analysis and potentially a separately labeled partial-document task; move to another target region for the primary complete-note track. Apply the recovery audit before further manual review to avoid repeated low-yield annotation.
+
+## July 17 reusable source-eligibility pre-screen added before the next region
+
+- Added `open-elm/cav_axis/source_grounded_rescue/screen_region_source_eligibility.py`. It evaluates all held-out rows in a fixed target cluster or basin without exporting source-note text, assigns Tier 1 complete-note review candidate, Tier 2 partial-document review candidate, or Tier 3 insufficient-evidence status, and records field-level evidence routes plus patient-disjoint provenance.
+- Tier 1 is still only a manual-review candidate: a source ledger must be reviewed before generation. The screen uses full-note heading recovery for follow-up/instructions and `admissions.discharge_location` only as a disposition candidate; it never automatically converts diagnoses, procedures, or medication orders into discharge facts.
+- A three-row cluster-36 smoke test yielded only Tier 3 rows, consistent with the completed recovery audit. Next action: run the screen across clinically distinct candidate sparse regions, then select the next 30-anchor replication only from a region with an adequate Tier 1 reserve.
+
+## July 17 calibrated eligibility screen and frozen cluster-16 review cohort
+
+- The initial generic text-length/punctuation rule was too strict for short diagnoses and list-form medications/instructions. `screen_region_source_eligibility.py` is now field-aware and remains a high-recall triage screen, not a fact validator.
+- Across held-out clusters 11/16/25, the recalibrated screen found Tier 1 complete-note review candidates: cluster 11 `19` (8 patient-disjoint), cluster 16 `52` (25 patient-disjoint), and cluster 25 `66` (6 patient-disjoint). Cluster 16 has the strongest patient-disjoint reserve and `39.4%` Tier 1 rate, making it the next clinically distinct primary replication candidate.
+- `region16_fact_only_replication_30_v1/region_anchor_manifest.csv` is frozen with deterministic seed `20260718`: 30 cluster-16 Tier 1 review candidates, including 14 patient-disjoint rows. This is not yet source-ledger verified and no generation may start until its ledger review clears the existing factual contract.
+
+## July 17 cluster-16 recovery consistency check
+
+- The first standard extraction audit reported all 30 cluster-16 follow-up sections as placeholders. This was an extraction-order artifact: a note can contain an early placeholder heading and a later substantive heading. It was not evidence that the Tier 1 screen was wrong.
+- `recover_anchor_evidence.py`, `screen_region_source_eligibility.py`, and `build_source_fact_ledger.py` now select the strongest matching heading instead of the first one. The corrected restricted recovery audit finds substantive follow-up and instructions in all 30 frozen cluster-16 anchors, with a structured disposition candidate in all 30.
+- Rebuild the cluster-16 ledger into a versioned recovery-aware folder and manually verify it before any generation. The recovery result establishes review eligibility only; it does not automatically validate any extracted fact.
+
+## July 17 cluster-16 reviewed ledger: complete-note contract rejected; transition-note track viable
+
+- The authoritative biomedical review (`docs/bariatric_fact_ledger_review_completed_RESTRICTED.csv`) covered 291 facts across 30 frozen cluster-16 cases: 90 verified, 155 corrected, 46 omitted, and zero pending. Only `ledger_024` and `ledger_027` retain all six core fields.
+- All other 28 cases are missing only a reliable follow-up fact; the broad heading-recovery match was medication-history or unrelated text. Therefore the broad automated recovery result must not be interpreted as validated follow-up evidence, and the six-field complete-discharge track is blocked for this region.
+- All 30 cases retain the five source-supported transition fields: principal diagnosis, hospital course, discharge medications, disposition, and instructions. The project may evaluate these as a separately named ``source-supported discharge-transition note'' task, with follow-up optional and omitted when unsupported. This is a task definition change, not a weakening of the complete-note claim.
+- `validate_source_fact_ledger.py --optional_fields follow_up` confirms 30/30 ready for this new track, and `build_generation_ledger.py --optional_fields follow_up` serialized 245 prompt-safe facts across 30 cases. No transition-note generation has started yet.
+- The fact-only launcher now supports `--document_type discharge_transition_note` without requiring a raw-ELM manifest when running only the fact-only arm. The prompt-safe cluster-16 ledger was rebuilt with 30 unique `anchor_id`s and frozen patient-disjoint provenance at `.../region16_fact_only_replication_30_v1/discharge_transition_note_v1/prompt_safe_ledger_with_provenance_v2/`.
+- The first bounded transition-note pilot is complete: eight frozen anchors (four patient-disjoint), four sampled checkpoint-8215 fact-only candidates per anchor, 32/32 nonempty EOS-terminated outputs, and zero cap hits. BGE re-embedding and cluster-16 final-output selection gave 25/32 candidate landing (`78.1%`) and 7/8 selected landing (`87.5%`). An eight-note blinded review pack is ready; follow-up is marked optional and must be `not_applicable` only if absent from both ledger and note. No scale-up before this factual review clears.
+
+## July 17 transition-note confirmation: prompt-only follow-up guard rejected
+
+- First transition-note pilot blinded review: 6/8 pass, with two unsupported ``Follow-up: None'' claims and no critical omissions. A fresh eight-anchor confirmation was frozen rather than rerunning failed anchors.
+- The phrase-heavy follow-up guard made performance worse: 3/8 pass, four unsupported follow-up claims, one critical disposition omission, and 4/8 selected cluster-16 landing. Do not scale either prompt condition and do not add stronger wording around prohibited phrases; it induced paraphrased unsupported assertions.
+- New rule: factual output eligibility precedes geometry selection. When a ledger lacks follow-up, a deterministic output filter rejects any candidate that mentions follow-up; geometry ranks only eligible candidates. This retrospective filter is a diagnostic on the reviewed pilot, not confirmation evidence. A future independent pilot must use the minimal omission prompt plus this preselection filter.
+- The filtered diagnostic rejected 7/32 guard-pilot candidates while retaining at least one eligible candidate for every anchor. It remains post hoc. A third independent pilot is frozen at `.../pilot_8x4_dual_gate_confirm_v3/`: eight unused anchors, three patient-disjoint, seed `20260720`, excluding both prior pilots. Predeclared readiness for a 30-anchor cluster-16 transition-note replication: at least 5/8 selected eligible outputs land in cluster 16, at least 7/8 blinded factual passes, zero unsupported follow-up claims, and zero critical omissions. Otherwise freeze cluster 16 as a bounded negative/partial result and do not scale it.
+
+## July 17 cluster-16 prospective dual-gate confirmation: promising feasibility, no scale-up
+
+- The preselected factual filter rejected 13/32 candidates for unsupported follow-up mentions. Seven of eight anchors retained an eligible candidate; final selection landed in cluster 16 for 5/8 frozen anchors. Blinded review of the seven selected notes gave 6/7 factual passes, zero unsupported-major-claim failures, and one critical omission (the ledger-supported home disposition was omitted).
+- All five target-cluster-16 outputs passed review; one of two out-of-basin outputs passed. This is compatible with good clinical quality within the target region, but is too small for an association claim and does not make geometry a clinical-quality proxy.
+- The strict readiness rule was not met: factual pass count is 6/7 rather than at least 7/8, one critical omission occurred, and one anchor had no eligible candidate. Freeze cluster 16 as a bounded prospective dual-gate feasibility/partial result; do not scale it to 30 anchors.
+- For the five-field transition-note contract, the calibrated screen gives high-recall candidate reserves: cluster 11 `87` (32 patient-disjoint), cluster 16 `106` (59 patient-disjoint), cluster 25 `317` (46 patient-disjoint). Cluster 25 is the next evidence-based replication target, pending frozen-anchor ledger review; do not reuse cluster-16 pilot cases for another confirmation.
+
+## July 21 cluster-25 replication: enforce patient-disjoint representation before ledger review
+
+- The first deterministic cluster-25 transition-note sample (30 anchors, seed `20260721`) contained only four patient-disjoint anchors because proportional sampling reflected the full eligible pool. This is reproducible but is not the official replication cohort: the eligible cluster-25 reserve contains 317 rows, including 46 patient-disjoint rows.
+- `build_region_anchor_manifest.py` now accepts `--min_patient_disjoint`. Freeze a new versioned cluster-25 manifest with at least eight patient-disjoint anchors before building the restricted source ledger. This is a pilot representation minimum, not a claim that the selected cohort reflects the natural patient-disjoint prevalence.
+- The next sequence is restricted ledger construction, evidence-recovery audit, manual fact verification, prompt-safe ledger validation, four-candidate fact-only generation, final-output geometry selection, and blinded clinical-factual review. Do not generate from the four-patient-disjoint manifest.
+
+## July 21 cluster-25 v2 restricted extraction: ready for manual fact review, not generation
+
+- The official `region25_transition_note_replication_30_v2_pd8` manifest is frozen: 30 cluster-25 anchors, eight patient-disjoint, deterministic seed `20260721`.
+- The restricted provisional ledger contains 287 facts. All 30 cases have hospital-course and instruction candidates; follow-up was placeholder-only in the standard extraction, while high-recall recovery found substantive follow-up candidates in only 7/30. Follow-up therefore remains optional and must be omitted unless manual review confirms a supported value.
+- Disposition is present in 29/30 standard extractions and has a structured admissions candidate in 30/30, but the short source phrases are only candidates. Medication, instruction, diagnosis, and disposition values require manual verification before serialization into a prompt-safe ledger.
+- This is a source-evidence eligibility result, not a clinical-quality or geometry result. The correct next action is manual restricted-ledger review, followed by structural validation with optional follow-up; do not launch generation yet.
+
 New package boundary:
 
 - `open-elm/cav_axis/clinical_validation/`: secure manual-label ingestion and deterministic triage.

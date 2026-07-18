@@ -24,12 +24,13 @@ from src.model import LlamaForEmbeddingLM
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run local source-grounded rescue generation.")
     parser.add_argument("--generation_ledger_path", required=True)
-    parser.add_argument("--raw_elm_manifest_path", required=True)
+    parser.add_argument("--raw_elm_manifest_path", default=None, help="Required only for the correction arm.")
     parser.add_argument("--backbone_path", required=True)
     parser.add_argument("--model_condition", choices=["untouched_backbone", "checkpoint_8215"], required=True)
     parser.add_argument("--checkpoint_path", default=None)
     parser.add_argument("--output_dir", required=True)
     parser.add_argument("--arms", default="correction,fact_only")
+    parser.add_argument("--document_type", choices=["complete_discharge_summary", "discharge_transition_note"], default="complete_discharge_summary")
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--max_new_tokens", type=int, default=3072)
     parser.add_argument("--n_candidates_per_case", type=int, default=1)
@@ -70,18 +71,24 @@ def load_model(args: argparse.Namespace) -> tuple[torch.nn.Module, dict[str, obj
     return model, metadata
 
 
-def build_prompt(facts: list[dict[str, str]], arm: str, raw_draft: str | None) -> str:
+def build_prompt(facts: list[dict[str, str]], arm: str, raw_draft: str | None, document_type: str) -> str:
     ledger_json = json.dumps(facts, indent=2, ensure_ascii=True)
+    has_follow_up = any(str(fact.get("field")) == "follow_up" for fact in facts)
+    follow_up_rule = (
+        "Include a Follow-up section only when the ledger explicitly supplies a supported follow-up fact.\n"
+        if has_follow_up else
+        "Omit follow-up when the ledger does not explicitly supply a supported follow-up fact.\n"
+    )
     common = (
-        "Create a concise synthetic discharge summary from the verified fact ledger below.\n"
+        f"Create a concise synthetic {document_type.replace('_', ' ')} from the verified fact ledger below.\n"
         "The ledger is the only factual authority. Do not invent diagnoses, procedures,\n"
         "complications, medications, doses, routes, laboratory values, demographics,\n"
         "disposition, follow-up, or dates. If a detail is absent from the ledger, omit it.\n"
         "For discharge medications, use only ledger medications, list each medication at most once,\n"
         "and never state that the same medication is both continued and discontinued.\n"
         "Use substantive sections only when supported: Discharge Diagnosis, Brief Hospital\n"
-        "Course, Major Procedure, Discharge Medications, Disposition, Follow-up, and\n"
-        "Instructions. Do not reproduce long source wording verbatim.\n\n"
+        "Course, Major Procedure, Discharge Medications, Disposition, and Instructions.\n"
+        + follow_up_rule + "Do not reproduce long source wording verbatim.\n\n"
         "VERIFIED FACT LEDGER:\n"
     )
     if arm == "fact_only":
@@ -152,10 +159,14 @@ def main() -> None:
     ledgers = load_ledgers(Path(args.generation_ledger_path).resolve())
     if args.n_candidates_per_case < 1:
         raise ValueError("--n_candidates_per_case must be at least one")
-    raw = pd.read_json(Path(args.raw_elm_manifest_path).resolve(), lines=True)
-    if raw.anchor_id.duplicated().any():
-        raise ValueError("raw ELM manifest must contain one selected note per anchor")
-    raw_by_anchor = raw.set_index("anchor_id").to_dict(orient="index")
+    raw_by_anchor: dict[str, dict[str, object]] = {}
+    if "correction" in arms:
+        if not args.raw_elm_manifest_path:
+            raise ValueError("--raw_elm_manifest_path is required for the correction arm")
+        raw = pd.read_json(Path(args.raw_elm_manifest_path).resolve(), lines=True)
+        if raw.anchor_id.duplicated().any():
+            raise ValueError("raw ELM manifest must contain one selected note per anchor")
+        raw_by_anchor = raw.set_index("anchor_id").to_dict(orient="index")
     tokenizer = AutoTokenizer.from_pretrained(args.backbone_path)
     model, model_metadata = load_model(args)
     model.eval()
@@ -169,12 +180,12 @@ def main() -> None:
     with manifest_path.open("a" if args.append else "w", encoding="utf-8") as handle:
         for ledger in ledgers:
             anchor_id = str(ledger["anchor_id"])
-            raw_row = raw_by_anchor.get(anchor_id)
-            if raw_row is None:
-                raise ValueError(f"no raw ELM note found for anchor_id={anchor_id}")
             for arm in arms:
+                raw_row = raw_by_anchor.get(anchor_id)
+                if arm == "correction" and raw_row is None:
+                    raise ValueError(f"no raw ELM note found for anchor_id={anchor_id}")
                 raw_draft = str(raw_row["generated_text"]) if arm == "correction" else None
-                prompt = build_prompt(ledger["facts"], arm, raw_draft)
+                prompt = build_prompt(ledger["facts"], arm, raw_draft, args.document_type)
                 for candidate_index in range(args.n_candidates_per_case):
                     candidate_seed = int(args.seed + candidate_index)
                     text, metadata = generate(
@@ -197,7 +208,7 @@ def main() -> None:
                         "generation_ledger_sha256": ledger["generation_ledger_sha256"],
                         "n_generation_facts": len(ledger["facts"]),
                         "prompt_sha256": hashlib.sha256(prompt.encode("utf-8")).hexdigest(),
-                        "raw_elm_candidate_id": raw_row.get("candidate_id"),
+                        "raw_elm_candidate_id": raw_row.get("candidate_id") if raw_row else None,
                         "generated_text": text,
                         **metadata,
                     }
@@ -208,6 +219,7 @@ def main() -> None:
         "n_outputs": len(rows), "n_cases": len(ledgers), "arms": arms,
         "model_condition": args.model_condition, "max_new_tokens": int(args.max_new_tokens),
         "n_candidates_per_case": int(args.n_candidates_per_case), "do_sample": bool(args.do_sample),
+        "document_type": args.document_type,
     }
     (output_dir / f"{output_stem}_{args.model_condition}_summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     print(json.dumps(summary, indent=2))

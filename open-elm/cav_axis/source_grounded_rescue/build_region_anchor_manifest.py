@@ -17,7 +17,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--real_cluster_assignments_path", required=True)
     parser.add_argument("--output_dir", required=True)
     parser.add_argument("--target_cluster_ids", required=True, help="Comma-separated fixed real-test cluster IDs")
+    parser.add_argument("--eligibility_candidates_path", default=None,
+                        help="Optional Tier-1 eligibility CSV; only its dataset_row_id values may be selected.")
     parser.add_argument("--n_anchors", type=int, default=30)
+    parser.add_argument("--min_patient_disjoint", type=int, default=0,
+                        help="Minimum patient-disjoint anchors when the eligible reserve permits it.")
     parser.add_argument("--seed", type=int, default=20260716)
     return parser.parse_args()
 
@@ -40,13 +44,23 @@ def main() -> None:
     if frame["dataset_row_id"].duplicated().any():
         raise ValueError("Cluster assignments contain duplicate dataset_row_id values.")
     candidates = frame.loc[frame["cluster_id"].isin(target_ids)].copy()
+    if args.eligibility_candidates_path:
+        eligibility = pd.read_csv(Path(args.eligibility_candidates_path).resolve())
+        if "dataset_row_id" not in eligibility.columns:
+            raise KeyError("Eligibility CSV must contain dataset_row_id.")
+        if "eligibility_tier" in eligibility.columns:
+            eligibility = eligibility.loc[eligibility["eligibility_tier"] == "tier1_complete_review_candidate"].copy()
+        eligible_ids = set(pd.to_numeric(eligibility["dataset_row_id"], errors="raise").astype(int))
+        candidates = candidates.loc[candidates["dataset_row_id"].isin(eligible_ids)].copy()
     if len(candidates) < args.n_anchors:
         raise ValueError(f"Target basin has only {len(candidates)} rows, fewer than requested {args.n_anchors}.")
     candidates["patient_disjoint_from_train"] = candidates["patient_disjoint_from_train"].fillna(False).astype(bool)
     candidates["stable_rank"] = candidates["dataset_row_id"].map(lambda value: stable_rank(int(value), args.seed))
     pd_candidates = candidates.loc[candidates["patient_disjoint_from_train"]].sort_values("stable_rank")
     overlap_candidates = candidates.loc[~candidates["patient_disjoint_from_train"]].sort_values("stable_rank")
-    pd_target = min(len(pd_candidates), max(1, round(args.n_anchors * len(pd_candidates) / len(candidates))))
+    proportional_pd_target = max(1, round(args.n_anchors * len(pd_candidates) / len(candidates)))
+    requested_pd_target = max(proportional_pd_target, int(args.min_patient_disjoint))
+    pd_target = min(len(pd_candidates), args.n_anchors, requested_pd_target)
     selected = pd.concat([pd_candidates.head(pd_target), overlap_candidates.head(args.n_anchors - pd_target)], ignore_index=True)
     if len(selected) != args.n_anchors:
         selected = candidates.sort_values("stable_rank").head(args.n_anchors).copy()
@@ -62,6 +76,8 @@ def main() -> None:
         "patient_disjoint_count": int(selected["patient_disjoint_from_train"].sum()),
         "cluster_counts": {str(key): int(value) for key, value in selected.cluster_id.value_counts().sort_index().items()},
         "seed": int(args.seed), "selection": "deterministic target-basin sample stratified by patient-disjoint status",
+        "min_patient_disjoint_requested": int(args.min_patient_disjoint),
+        "eligibility_candidates_path": str(Path(args.eligibility_candidates_path).resolve()) if args.eligibility_candidates_path else None,
     }
     (out / "region_anchor_manifest_summary.json").write_text(json.dumps(summary, indent=2) + "\n")
     print(json.dumps(summary, indent=2))

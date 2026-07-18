@@ -35,6 +35,10 @@ FIELD_ALIASES = {
     "follow_up": ("followup instructions", "follow up instructions", "follow-up instructions", "follow up"),
     "instructions": ("discharge instructions", "instructions"),
 }
+RECOVERY_PATTERNS = {
+    "follow_up": r"follow[- ]?up(?: instructions)?|appointments?|post[- ]discharge care",
+    "instructions": r"discharge instructions|patient instructions|instructions",
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -86,6 +90,28 @@ def find_section(sections: dict[str, tuple[str, int, int]], aliases: tuple[str, 
             if heading == normalized or heading.startswith(normalized):
                 return heading, payload[0], payload[1], payload[2]
     return None
+
+
+def is_placeholder(value: str) -> bool:
+    normalized = re.sub(r"[\s_\-.:/]+", "", value).lower()
+    return not normalized or normalized in {"na", "none", "unknown", "notavailable"}
+
+
+def recover_best_heading(text: str, pattern: str) -> tuple[str, int, int] | None:
+    """Return the longest non-placeholder matching section for later review."""
+    heading = re.compile(rf"(?im)^\s*(?:{pattern})\s*:?\s*(.*)$")
+    candidates: list[tuple[str, int, int]] = []
+    for match in heading.finditer(text):
+        start = match.start(1)
+        kept: list[str] = []
+        for line in text[start:].splitlines()[:8]:
+            if kept and re.match(r"^\s*[A-Z][A-Z /&-]{2,80}:?\s*$", line.strip()):
+                break
+            kept.append(line)
+        value = "\n".join(kept).strip()
+        if not is_placeholder(value):
+            candidates.append((value, start, start + len(value)))
+    return max(candidates, key=lambda item: len(item[0].split()), default=None)
 
 
 def add_fact(facts: list[dict[str, object]], case_id: str, field: str, value: str, section: str, start: int | None, end: int | None, max_chars: int) -> None:
@@ -155,6 +181,12 @@ def main() -> None:
             add_fact(facts, case_id, "demographics.sex", sex_match.group(1), "header", sex_match.start(1), sex_match.end(1), args.max_fact_chars)
         for field, aliases in FIELD_ALIASES.items():
             found = find_section(sections, aliases)
+            if field in RECOVERY_PATTERNS and (found is None or is_placeholder(found[1])):
+                recovered = recover_best_heading(text, RECOVERY_PATTERNS[field])
+                if recovered is not None:
+                    value, start, end = recovered
+                    add_fact(facts, case_id, field, value, "full_note_heading_recovery", start, end, args.max_fact_chars)
+                    continue
             if found is not None:
                 heading, value, start, end = found
                 add_fact(facts, case_id, field, value, heading, start, end, args.max_fact_chars)

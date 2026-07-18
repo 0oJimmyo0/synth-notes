@@ -30,6 +30,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--review_template_csv", required=True)
     parser.add_argument("--completed_audit_ledger_csv", default=None, help="Optional completed restricted audit ledger for case provenance.")
     parser.add_argument("--pilot_anchor_manifest", default=None, help="Optional pilot anchor manifest for anchor provenance.")
+    parser.add_argument("--optional_fields", default="", help="Comma-separated source-supported fields allowed to be absent.")
+    parser.add_argument("--anchor_manifest_path", default=None, help="Optional frozen anchor manifest for leakage metadata.")
     parser.add_argument("--output_dir", required=True)
     return parser.parse_args()
 
@@ -37,10 +39,33 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     frame = pd.read_csv(Path(args.review_template_csv).resolve())
-    required = {"case_id", "fact_id", "field", "generation_value", "generation_value_review_status"}
+    required = {"case_id", "fact_id", "field", "generation_value"}
     missing = required.difference(frame.columns)
     if missing:
         raise KeyError(f"generation-ledger review template missing columns: {sorted(missing)}")
+    optional_fields = {value.strip() for value in args.optional_fields.split(",") if value.strip()}
+    unknown_optional = optional_fields.difference(REQUIRED_FIELDS)
+    if unknown_optional:
+        raise ValueError(f"--optional_fields contains non-required fields: {sorted(unknown_optional)}")
+    if "generation_value_review_status" not in frame.columns:
+        if "manual_verification_status" not in frame.columns:
+            raise KeyError("input needs generation_value_review_status or manual_verification_status")
+        # Reviewed ledgers can be serialized directly when reviewers supplied generation_value.
+        frame["generation_value_review_status"] = frame["manual_verification_status"].replace({"omitted": "omit"})
+    if args.anchor_manifest_path:
+        anchors = pd.read_csv(Path(args.anchor_manifest_path).resolve())
+        if "dataset_row_id" not in anchors.columns or "dataset_row_id" not in frame.columns:
+            raise KeyError("anchor manifest and review input must contain dataset_row_id")
+        anchor_columns = [column for column in ["dataset_row_id", "patient_disjoint_from_train"] if column in anchors.columns]
+        anchors = anchors[anchor_columns].drop_duplicates("dataset_row_id")
+        frame = frame.merge(anchors, on="dataset_row_id", how="left", validate="many_to_one", suffixes=("", "_anchor"))
+        if "patient_disjoint_from_train_anchor" in frame.columns:
+            frame["patient_disjoint_from_train"] = frame["patient_disjoint_from_train_anchor"]
+            frame = frame.drop(columns="patient_disjoint_from_train_anchor")
+    if "anchor_id" not in frame.columns:
+        if "dataset_row_id" not in frame.columns:
+            raise KeyError("review input needs anchor_id or dataset_row_id")
+        frame["anchor_id"] = frame["dataset_row_id"].map(lambda value: f"anchor_{int(value)}")
     frame["generation_value_review_status"] = frame.generation_value_review_status.fillna("").astype(str).str.strip().str.lower()
     invalid = set(frame.generation_value_review_status).difference(VALID_STATUSES)
     if invalid:
@@ -72,7 +97,7 @@ def main() -> None:
     ledgers = []
     for case_id, group in usable.groupby("case_id", sort=True):
         fields = set(group.field.astype(str))
-        missing_fields = REQUIRED_FIELDS.difference(fields)
+        missing_fields = REQUIRED_FIELDS.difference(optional_fields).difference(fields)
         if missing_fields:
             raise ValueError(f"{case_id} is missing required generation fields: {sorted(missing_fields)}")
         facts = [
@@ -105,6 +130,8 @@ def main() -> None:
     summary = {
         "n_cases": len(ledgers),
         "n_generation_facts": int(len(usable)),
+        "required_fields": sorted(REQUIRED_FIELDS.difference(optional_fields)),
+        "optional_fields": sorted(optional_fields),
         "source_spans_in_output": False,
         "security_note": "Generation values remain source-derived facts and must remain on approved project storage.",
     }
