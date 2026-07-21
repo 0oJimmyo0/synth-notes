@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=elm_reembed_syn
-#SBATCH --output=/dev/null
-#SBATCH --error=/dev/null
+#SBATCH --output=/gpfs/radev/project/xu_hua/mj756/synthnote/log/reembed_generated_notes_%j.out
+#SBATCH --error=/gpfs/radev/project/xu_hua/mj756/synthnote/log/reembed_generated_notes_%j.err
 #SBATCH --time=06:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
@@ -13,7 +13,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="/gpfs/radev/pi/xu_hua/shared/synthnote/physionet.org/files/embedding_elm/open-elm/cav_axis"
-LOG_DIR="${SCRIPT_DIR}/log"
+LOG_DIR="/gpfs/radev/project/xu_hua/mj756/synthnote/log"
 mkdir -p "${LOG_DIR}"
 exec > >(tee "${LOG_DIR}/reembed_generated_notes_${SLURM_JOB_ID}.out")
 exec 2> >(tee "${LOG_DIR}/reembed_generated_notes_${SLURM_JOB_ID}.err" >&2)

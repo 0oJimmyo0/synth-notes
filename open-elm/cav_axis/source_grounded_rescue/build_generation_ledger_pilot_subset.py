@@ -16,6 +16,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--generation_ledger_path", required=True)
     parser.add_argument("--output_dir", required=True)
     parser.add_argument("--n_cases", type=int, default=8)
+    parser.add_argument("--min_patient_disjoint", type=int, default=0,
+                        help="Minimum patient-disjoint cases when the eligible ledger reserve permits it.")
     parser.add_argument("--seed", type=int, default=20260718)
     parser.add_argument("--exclude_case_manifest_path", action="append", default=[], help="Prior pilot case manifest to exclude; repeat as needed.")
     return parser.parse_args()
@@ -48,7 +50,9 @@ def main() -> None:
     frame["stable_rank"] = frame.case_id.map(lambda value: rank(str(value), args.seed))
     pd_rows = frame.loc[frame.patient_disjoint_from_train].sort_values("stable_rank")
     overlap_rows = frame.loc[~frame.patient_disjoint_from_train].sort_values("stable_rank")
-    n_pd = min(len(pd_rows), max(1, round(args.n_cases * len(pd_rows) / len(frame))))
+    proportional_pd_target = max(1, round(args.n_cases * len(pd_rows) / len(frame)))
+    requested_pd_target = max(proportional_pd_target, int(args.min_patient_disjoint))
+    n_pd = min(len(pd_rows), args.n_cases, requested_pd_target)
     selected = pd.concat([pd_rows.head(n_pd), overlap_rows.head(args.n_cases - n_pd)], ignore_index=True)
     if len(selected) != args.n_cases:
         selected = frame.sort_values("stable_rank").head(args.n_cases).copy()
@@ -57,6 +61,7 @@ def main() -> None:
     selected.to_csv(out / "pilot_case_manifest.csv", index=False)
     summary = {
         "n_cases": int(len(selected)), "patient_disjoint_count": int(selected.patient_disjoint_from_train.sum()),
+        "min_patient_disjoint_requested": int(args.min_patient_disjoint),
         "seed": int(args.seed), "source_generation_ledger": str(Path(args.generation_ledger_path).resolve()),
         "excluded_case_manifests": [str(Path(path).resolve()) for path in args.exclude_case_manifest_path],
     }

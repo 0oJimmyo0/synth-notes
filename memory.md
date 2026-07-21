@@ -1963,6 +1963,127 @@ Current blocker before the three-arm pilot:
 - Disposition is present in 29/30 standard extractions and has a structured admissions candidate in 30/30, but the short source phrases are only candidates. Medication, instruction, diagnosis, and disposition values require manual verification before serialization into a prompt-safe ledger.
 - This is a source-evidence eligibility result, not a clinical-quality or geometry result. The correct next action is manual restricted-ledger review, followed by structural validation with optional follow-up; do not launch generation yet.
 
+## July 21 cluster-25 v2 reviewed-ledger result: bounded dual-gate pilot is ready
+
+- Manual review of all 287 provisional facts retained 77 verified and 164 corrected values, omitting 46 unsafe or unsupported values. The validator confirms 21/30 cases retain all five required transition fields when follow-up is optional; nine cases are blocked for missing instructions (four), medication plus instruction/diagnosis support (four), or disposition (one).
+- Exact string-span matching covers only 7/241 retained values because reviewers normalized concise generation values. This automated rate is a provenance limitation, not a replacement for the completed manual source-evidence review; retain both measures in reporting.
+- `build_generation_ledger.py` now accepts `--case_readiness_path`, preventing blocked cases from entering a prompt-safe ledger. `build_generation_ledger_pilot_subset.py` now accepts `--min_patient_disjoint`.
+- A prompt-safe 21-case ledger (179 facts) and frozen cluster-25 pilot are prepared at `.../region25_transition_note_replication_30_v2_pd8/discharge_transition_note_v1/pilot_8x4_dual_gate_v1/`: eight cases, four patient-disjoint, seed `20260722`, and 69 facts. Next action is four-candidate checkpoint-8215 fact-only generation, then final-output BGE selection with the absent-follow-up factual filter and blinded clinical-factual review. This remains a bounded second-region feasibility replication, not cohort-scale generation.
+
+## July 18 cluster-25 pilot launch: shared PI filesystem full, rerun outputs moved to project storage
+
+- The first cluster-25 generation launch stopped after eight outputs from two anchors with `OSError: [Errno 122] Disk quota exceeded`; the expected generated BGE `.npy` file is therefore absent and geometry selection correctly cannot start. The partial `17K` manifest is preserved as a failed-run diagnostic and must not be appended to or analyzed.
+- The cause is shared infrastructure, not this project: `/gpfs/radev/pi/xu_hua` is `20T/20T` full, while `/gpfs/radev/project/xu_hua/mj756` has ample capacity. Keep MIMIC inputs read-only in the PI path, but write new cluster-25 generation, re-embedding, selection, review artifacts, and Slurm logs under `/gpfs/radev/project/xu_hua/mj756/synthnote/`.
+- `source_grounded_fact_only.slurm` now writes Slurm stdout/stderr to `/gpfs/radev/project/xu_hua/mj756/synthnote/log/source_grounded_rescue/`. Rerun the frozen 8x4 pilot into a new `generation_project_v2` directory rather than appending to the partial PI-path output.
+
+## July 18 storage triage: retire legacy pickle workflow without touching the active cohort
+
+- Read-only audit found the active note/HADM pipeline is `data_note_hadm_all` (19G) plus `pickle_ds_note_hadm_all` (7.1G); both remain required for checkpoint-8215 provenance, leakage alignment, source-ledger construction, privacy screening, and the cluster-25 replication.
+- The obsolete pre-note/HADM MIMIC-IV workflow is `pickle_ds` (121G, 94,460 legacy patient-object files), plus `data/clinic_notes` (4G), legacy embedding outputs (about 1.7G), and `output/core.csv` (513M). No active workspace, home/project code, or Slurm job references the exact legacy pickle path; the one old launcher points to a nonexistent different path. Retiring this workflow does not affect the current research plan, but removes the ability to rerun obsolete preliminary experiments without an archive.
+- Added `preprocessing_mimiciv/transfer_legacy_pickle_to_scratch.slurm`: a four-worker, resumable copy-and-verify launcher that never deletes the source. It logs to scratch and has separate `copy` and checksum `verify` modes. Do not delete the PI source until copy verification is explicitly reviewed.
+- The copy stage completed cleanly through four rsync workers: source and scratch destination each contain 94,460 files and report 121G. The original interactive allocation was released after the transfer. A four-worker checksum verification remains required; only an empty `checksum_differences.txt`, matching count/byte summary, and clean worker stderr files permit a later explicit source-removal decision.
+- Scratch verification completed successfully: 94,460 files and 128,133,819,135 bytes matched exactly, checksum differences were zero, and all worker stderr files were empty. The explicitly approved legacy PI source `mimiciv/3.1/pickle_ds` was removed. `/gpfs/radev/pi/xu_hua` now reports 121G available; active `pickle_ds_note_hadm_all` remains present at 7.1G and is unchanged.
+
+## July 19 cluster-25 clean candidate generation complete
+
+- The quota-failed partial generation remains preserved at `.../pilot_8x4_dual_gate_v1/generation/` and is not used. The clean official rerun at `.../generation_clean_rerun_v2/` completed with checkpoint-8215: 32/32 unique fact-only candidates across eight frozen anchors (four per anchor), zero empty outputs, zero token-cap hits, and 32/32 EOS-terminated outputs.
+- Its run summary records the intended `discharge_transition_note` task, 3072 maximum new tokens, sampled decoding, and four candidates per case. `run_source_grounded_rescue.py` now also records `document_type` per candidate for future runs; the current immutable manifest is linked to its run-level summary sidecar.
+- Next step: BGE re-embed the 32 clean candidates, apply the prospective absent-follow-up factual filter and final-output cluster-25 geometry selection, then prepare a blinded factual review pack. No scale-up or cohort-level claim before that review.
+
+## July 19 cluster-25 clean candidate re-embedding complete
+
+- Re-embedding job `2135857` completed successfully. The clean cluster-25 manifest has 32 rows and its BGE matrix is finite, shape `(32, 1024)`, and exactly row-aligned. Metadata records BAAI/bge-large-en-v1.5 on CUDA, batch size 128, and the generation/re-embedding paths.
+- Next action is CPU-side prospective selection: reject outputs mentioning follow-up when their ledger has no verified follow-up fact, then rank the remaining candidates within each frozen anchor by final BGE cluster-25 membership, basin margin, and target cosine. Build a blinded review pack from the selected eligible subset only.
+
+## July 19 cluster-25 prospective selection complete: blinded review is the next gate
+
+- The prospective absent-follow-up filter retained 21/32 candidates and rejected 11/32. Six of eight frozen anchors retained at least one eligible candidate; both patient-disjoint and patient-overlap subsets contribute 3/4 selected target-cluster outputs. Two anchors were correctly withheld: one patient-overlap anchor had no target candidate, and one patient-disjoint anchor had target candidates but all four were rejected for unsupported follow-up mentions.
+- All six selected eligible outputs land in target cluster 25. Thus the honest geometry result is 6/8 frozen-anchor target coverage (75%), not 6/6. This supports output-space feasibility only; it is not a clinical-quality result and must not trigger scale-up.
+- A six-row restricted blinded pack is ready at `.../pilot_8x4_dual_gate_v1/blinded_review_clean_rerun_v2/geometry_selected_fact_only_blinded_review.csv`, with a separate key. Next action: blinded ledger-grounded clinical-factual review using the established required-field rule, then post-review analysis and patient-disjoint reporting.
+
+## July 19 cluster-25 prospective dual-gate review: geometry passed; disposition completeness blocks scale-up
+
+- The clean cluster-25 pilot selected one eligible output for six of eight frozen anchors; all six landed in target cluster 25. The honest geometry endpoint is therefore 6/8 (75\%) frozen-anchor target coverage, with three of four patient-disjoint anchors represented in the selected set.
+- Finalized blinded ledger-grounded review of the six selected notes gave 4/6 factual passes (66.7\%), zero unsupported-major claims, and two critical omissions. Both failures omitted the ledger-supported disposition (``Home'' or ``Home With Service''); no failure was attributable to target-basin landing, and the six rows are too small and selected to test a geometry--quality association.
+- Candidate-level audit found a viable target-landing, follow-up-eligible alternative with a disposition heading for each failed anchor. The immediate limitation is therefore the selector's lack of prospective required-field structural eligibility, not evidence that the fact-only model cannot produce a disposition for those anchors.
+- `select_fact_only_geometry_candidates.py` now supports a generic `--enforce_required_field_headings` gate. It rejects outputs missing headings for ledger-required principal diagnosis, hospital course, discharge medications, disposition, or instructions; it retains the separate absent-follow-up omission rule and records field-specific rejection counts. This structural gate does not establish factuality and cannot be applied retrospectively as new evidence.
+- Freeze cluster 25 as a bounded second-region partial result. Before any new generation, audit yield under the new gate on the immutable pilot. A future independent confirmation must use the new predeclared gate and retain explicit patient-disjoint limitations; do not scale, use LLM editing, or make cohort-level enrichment claims yet.
+
+## July 19 cluster-25 prospective completeness-screen diagnostic: confirmation design updated
+
+- The immutable 32-candidate pilot was reprocessed only as a diagnostic with the new required-field-heading screen. It retained 16/32 structurally eligible candidates, six of eight anchors with an eligible candidate, and 6/8 selected target-cluster-25 outputs. The screen identified missing disposition headings in six candidates, while each previously failed selected anchor retained an alternative target-landing candidate with a disposition heading.
+- This supports testing the structural screen prospectively; it does not alter the frozen 4/6 blinded result. The next cluster-25 cohort must be independently frozen from the broader high-recall eligibility reserve, excluding all 30 rows in `region25_transition_note_replication_30_v2_pd8` and enforcing a patient-disjoint minimum before manual ledger review.
+- `build_region_anchor_manifest.py` now supports `--exclude_manifest_path`, records excluded IDs in its summary, and can therefore enforce non-overlap with any prior frozen cohort.
+- The independent confirmation manifest is frozen at `.../region25_transition_note_confirmation_12_v3_pd4/`: 12 unseen cluster-25 anchors, four patient-disjoint, seed `20260724`, excluding all 30 anchors from the original cluster-25 cohort. It is ready only for restricted provisional-ledger construction and manual fact verification; no generation has started.
+
+## July 21 cluster-25 independent confirmation: source ledger cleared, pilot frozen
+
+- Manual source-evidence review covered 113 facts across 12 unseen anchors: 33 verified, 62 corrected, and 18 omitted. Placeholder-only follow-up was retained only when substantively supported (`ledger_010`, `ledger_012`); it remains optional in the transition-note task.
+- The validator confirms 10/12 cases are ready for generation with all five required fields. `ledger_008` is blocked for unsupported disposition; `ledger_009` is blocked for missing discharge medications and instructions. Both were excluded rather than reconstructed.
+- The prompt-safe ledger at `.../prompt_safe_ledger_ready10_v1/` contains 10 cases and 82 compact facts, no source-note spans, and the required transition fields with optional follow-up. The fixed prospective generation cohort at `.../discharge_transition_note_v1/pilot_10x4_required_fields_v1/` contains those ten cases, including three patient-disjoint cases, seed `20260724`.
+- Next action: generate exactly four checkpoint-8215 fact-only candidates per frozen case, BGE re-embed, then select only candidates passing both unsupported-follow-up and required-field-heading screens before blinded review. Do not add blocked cases or alter this frozen cohort.
+
+## July 21 cluster-25 independent confirmation: prospective geometry/completeness gate
+
+- The fixed 10-case cohort generated 40 checkpoint-8215 fact-only candidates. After the predeclared absent-follow-up and required-field-heading gates, 22/40 candidates remained eligible and 7/10 anchors retained a selected output. Five selected outputs land in target cluster 25, two selected outputs are outside, and three anchors have no structurally eligible candidate. The honest target geometry yield is therefore 5/10 frozen anchors, below the predeclared scale-up threshold.
+- A blinded seven-note review pack was created from all selected eligible outputs, not only target-landing notes: `.../pilot_10x4_required_fields_v1/blinded_review_required_fields_v1/geometry_selected_fact_only_blinded_review.csv`. The key is separate and must remain unopened until all labels are final. This review tests whether the prospective required-field screen improves factual completeness despite insufficient geometry yield; it cannot justify scaling by itself.
+
+## July 21 cluster-25 independent confirmation: blinded clinical gate clears controlled scale-up
+
+- Blinded review of all seven selected eligible outputs completed before unblinding: 6/7 passed (85.7\%), zero unsupported-major claims, and one critical omission. The failure (`ledger_003`) omitted a source-supported 12-day antibiotic plan and home drain-management services. Both patient-disjoint selected cases passed and both landed in cluster 25.
+- Deterministic post-review analysis at `.../blinded_review_required_fields_v1/post_review_analysis/` reproduces the result. Target outputs passed 4/5 and non-target outputs passed 2/2; the sample is too small to infer a geometry--quality association.
+- The required-field-heading screen prevents missing sections but does not guarantee within-section fact coverage. This remaining failure is an acceptance/yield issue, not a reason to treat omitted critical transition details as acceptable.
+- The result clears only a controlled moderate-scale next step: increase the source-grounded eligible anchor pool and candidate count with the same predeclared gates, then use blinded stratified quality-control review. It does not justify full-cohort production, a claim of real-note equivalence, or automatic clinical deployment.
+
+## July 21 cluster-25 moderate-scale cohort: source-evidence gate cleared
+
+- A new independent 30-anchor cluster-25 cohort (`seed 20260725`) was frozen after excluding all 42 anchors used in the two prior cluster-25 cohorts. It contains eight patient-disjoint anchors.
+- Manual review of 284 provisional facts retained 84 verified and 154 corrected values, omitting 46. The validator cleared 24/30 cases with all five required transition fields, including six patient-disjoint cases; six cases remain blocked rather than imputed.
+- The prompt-safe ledger (`prompt_safe_ledger_ready24_v1`) contains 24 cases and 197 compact facts. The fixed moderate-scale generation cohort (`pilot_24x4_v1`) contains exactly those 24 cases, six patient-disjoint, with four sampled candidates per case (96 total). Next action is checkpoint-8215 fact-only generation, final-output BGE re-embedding, the same predeclared factual/structural eligibility and cluster-25 geometry selection, then blinded stratified review. This remains moderate-scale validation, not cohort-wide production.
+
+## July 21 cluster-25 moderate-scale generation complete: re-embedding and selection pending
+
+- Checkpoint-8215 generated 96/96 unique, non-empty fact-only candidates across 24 frozen anchors. Ninety-four outputs ended with EOS; two reached the 3072-token cap and must not be eligible for final selection.
+- `select_fact_only_geometry_candidates.py` now supports `--reject_cap_hits`, records `hit_max_new_tokens` as a specific rejection reason, and includes its count in the selection summary. Re-embed all 96 candidates first, then apply cap, unsupported-follow-up, and required-field-heading screens before final cluster-25 selection.
+
+## July 21 cluster-25 moderate-scale selection: blinded 20-note quality gate pending
+
+- Of 96 re-embedded candidates, 62 passed the cap, absent-follow-up, and required-field-heading screens. Twenty of 24 frozen anchors retained an eligible selected output; 12 selected outputs land in cluster 25. The honest final target yield is 12/24 frozen anchors (50\%), while 16/24 had at least one target-landing candidate before factual/structural selection.
+- Heading failures are dominated by disposition (13 candidates), followed by instructions (7); two cap-hit candidates were deterministically rejected. These are acceptance/yield accounting results, not silent exclusions.
+- A blinded 20-note pack contains every selected eligible output: 12 target-cluster and 8 non-target, with four frozen anchors unselected. The review key remains separate. Next action is blinded ledger-grounded review of all 20 notes; no further generation or threshold change before that gate.
+
+## July 21 cluster-25 moderate-scale clinical gate: passed; second-region replication begins
+
+- Deterministic post-review analysis of all 20 selected outputs confirms 19/20 passes (95\%), zero unsupported-major claims, one critical omission, mean factual faithfulness 4.55/5, and mean clinical consistency 4.45/5. All 12 target-cluster-25 outputs passed; the target/non-target quality difference is not interpretable at this sample size. All five patient-disjoint selected outputs passed.
+- The one failure was a non-target output that omitted two ledger-supported discharge medications (nadolol and furosemide). This preserves the key limitation: final-output screening yields a high-quality subset but is not a perfect medication-reconciliation guarantee.
+- Cluster 25 therefore clears moderate-scale Phase 2b validation in one region: 24 frozen anchors, 12/24 final target outputs, and 19/20 selected-output clinical passes. It still does not establish multi-region generalization, full-cohort production, clinical deployment, or a causal relation between geometry and quality.
+- A second-region cluster-11 cohort is frozen at `.../region11_transition_note_replication_19_v1_pd8/`: all 19 available Tier-1 candidates, including eight patient-disjoint cases, seed `20260726`. Next action is restricted ledger construction and manual source-evidence verification under the unchanged five-field transition-note contract before any cluster-11 generation.
+
+## July 21 cluster-11 second-region replication: source-evidence gate cleared
+
+- Manual review of 188 provisional facts retained 62 verified and 96 corrected values, omitting 30. Seventeen of 19 cluster-11 cases retain all five required transition fields, including seven patient-disjoint cases. The two blocked cases lack source-supported disposition (`ledger_003`) or instructions (`ledger_010`) and remain excluded.
+- The cluster-11 prompt-safe ledger contains 17 cases and 144 compact facts. The fixed independent replication cohort is `.../region11_transition_note_replication_19_v1_pd8/discharge_transition_note_v1/pilot_17x4_v1/`: 17 anchors, seven patient-disjoint, four sampled candidates per anchor (68 total), seed `20260726`.
+- Next action: checkpoint-8215 fact-only generation, BGE re-embedding, and the unchanged cap/follow-up/required-heading selection protocol targeting cluster 11. This tests whether the cluster-25 moderate-scale result generalizes across a distinct sparse real-note region.
+
+## July 21 cluster-11 second-region generation and geometry selection: clinical gate pending
+
+- The 17-anchor cohort generated 68 unique non-empty candidates; three cap-hit candidates are rejected. Under the unchanged cap/follow-up/required-heading protocol, 40/68 candidates are eligible and 15/17 anchors retain a selected output.
+- Eleven of the 15 selected outputs land in cluster 11, for an honest target geometry yield of 11/17 frozen anchors (64.7\%). Thirteen anchors had at least one target-landing candidate before selection. Disposition-heading failures are the largest structural rejection source (17 candidates).
+- A blinded 15-note review pack has been created with every selected eligible output: 11 target-cluster and four non-target outputs; two frozen anchors are unselected. Next action is blinded ledger-grounded review of all 15 notes before unblinding or any cross-region scale-up claim.
+
+## July 21 cluster-11 blinded review: geometry generalizes, raw clinical quality does not
+
+- Deterministic unblinded analysis of all 15 selected cluster-11 outputs confirms 12/15 factual passes (80\%), two unsupported-major-claim failures, and one critical medication-reconciliation omission. Mean factual faithfulness was 4.27/5 and mean clinical consistency 4.20/5; four of five patient-disjoint selected notes passed.
+- The two unsupported failures added unverified or internally contradictory discharge medications. The omission failure dropped three ledger-supported discharge medications. These are medication-content failures occurring despite required medication headings, so section-presence screening is insufficient.
+- Cross-region conclusion: the output-space geometry workflow generalized from cluster 25 to cluster 11 (11/17 final target outputs), but the raw fact-only generation quality did not generalize uniformly. Cluster 25 remains a positive one-region moderate-scale result; the combined evidence does not support cross-region or cohort-wide raw generation claims.
+- Do not scale raw selected notes further. Next technical block is a source-ledger-to-output medication-reconciliation diagnostic on the completed cluster-25 and cluster-11 reviews. It must be evaluated as a detector against existing blinded human labels before becoming a prospective rejection gate. Only if deterministic coverage is inadequate should the project move to an approved local LLM-as-judge; an LLM editor must not be used to conceal these errors.
+
+## July 21 medication-reconciliation diagnostic: deterministic lexical gate rejected
+
+- Added `source_grounded_rescue/audit_medication_reconciliation.py`, a conservative lexical source-ledger-to-output diagnostic. It audits the discharge-medication section against verified ledger medication terms and evaluates flags against completed human labels; it is explicitly not an automatic clinical verifier.
+- On the 35 completed selected-output reviews from cluster 25 and cluster 11, the lexical detector flagged 10 outputs but detected only 1/2 manual medication-addition failures (sensitivity 50\%) while flagging 27.3\% of manual medication passes. It also caught the cluster-25 medication-omission case through missing terms. The detector is therefore unsuitable as a prospective rejection gate.
+- Next Phase 3a step: evaluate an approved local ledger-grounded LLM-as-judge, using cluster-25 reviews as development data and the completed cluster-11 review as held-out evaluation. The judge must produce field-level support, medication omission, extra-medication, contradiction, and final accept/reject labels. It must demonstrate detection of all held-out critical/unsupported failures with a tolerable false-rejection burden before any prospective use. Do not implement an editor until this judge is validated.
+
 New package boundary:
 
 - `open-elm/cav_axis/clinical_validation/`: secure manual-label ingestion and deterministic triage.

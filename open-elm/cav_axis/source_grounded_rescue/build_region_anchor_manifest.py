@@ -19,6 +19,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--target_cluster_ids", required=True, help="Comma-separated fixed real-test cluster IDs")
     parser.add_argument("--eligibility_candidates_path", default=None,
                         help="Optional Tier-1 eligibility CSV; only its dataset_row_id values may be selected.")
+    parser.add_argument(
+        "--exclude_manifest_path",
+        default=None,
+        help="Optional prior anchor manifest; its dataset_row_id values are excluded to make this cohort independent.",
+    )
     parser.add_argument("--n_anchors", type=int, default=30)
     parser.add_argument("--min_patient_disjoint", type=int, default=0,
                         help="Minimum patient-disjoint anchors when the eligible reserve permits it.")
@@ -52,6 +57,13 @@ def main() -> None:
             eligibility = eligibility.loc[eligibility["eligibility_tier"] == "tier1_complete_review_candidate"].copy()
         eligible_ids = set(pd.to_numeric(eligibility["dataset_row_id"], errors="raise").astype(int))
         candidates = candidates.loc[candidates["dataset_row_id"].isin(eligible_ids)].copy()
+    excluded_ids: set[int] = set()
+    if args.exclude_manifest_path:
+        previous = pd.read_csv(Path(args.exclude_manifest_path).resolve())
+        if "dataset_row_id" not in previous.columns:
+            raise KeyError("Exclusion manifest must contain dataset_row_id.")
+        excluded_ids = set(pd.to_numeric(previous["dataset_row_id"], errors="raise").astype(int))
+        candidates = candidates.loc[~candidates["dataset_row_id"].isin(excluded_ids)].copy()
     if len(candidates) < args.n_anchors:
         raise ValueError(f"Target basin has only {len(candidates)} rows, fewer than requested {args.n_anchors}.")
     candidates["patient_disjoint_from_train"] = candidates["patient_disjoint_from_train"].fillna(False).astype(bool)
@@ -78,6 +90,8 @@ def main() -> None:
         "seed": int(args.seed), "selection": "deterministic target-basin sample stratified by patient-disjoint status",
         "min_patient_disjoint_requested": int(args.min_patient_disjoint),
         "eligibility_candidates_path": str(Path(args.eligibility_candidates_path).resolve()) if args.eligibility_candidates_path else None,
+        "exclude_manifest_path": str(Path(args.exclude_manifest_path).resolve()) if args.exclude_manifest_path else None,
+        "excluded_prior_anchor_count": len(excluded_ids),
     }
     (out / "region_anchor_manifest_summary.json").write_text(json.dumps(summary, indent=2) + "\n")
     print(json.dumps(summary, indent=2))

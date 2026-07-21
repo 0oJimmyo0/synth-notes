@@ -32,6 +32,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--pilot_anchor_manifest", default=None, help="Optional pilot anchor manifest for anchor provenance.")
     parser.add_argument("--optional_fields", default="", help="Comma-separated source-supported fields allowed to be absent.")
     parser.add_argument("--anchor_manifest_path", default=None, help="Optional frozen anchor manifest for leakage metadata.")
+    parser.add_argument("--case_readiness_path", default=None,
+                        help="Optional validator case-readiness CSV; only rows with ledger_ready_for_generation=true are serialized.")
     parser.add_argument("--output_dir", required=True)
     return parser.parse_args()
 
@@ -47,6 +49,19 @@ def main() -> None:
     unknown_optional = optional_fields.difference(REQUIRED_FIELDS)
     if unknown_optional:
         raise ValueError(f"--optional_fields contains non-required fields: {sorted(unknown_optional)}")
+    if args.case_readiness_path:
+        readiness = pd.read_csv(Path(args.case_readiness_path).resolve())
+        readiness_required = {"case_id", "ledger_ready_for_generation"}
+        if missing := readiness_required.difference(readiness.columns):
+            raise KeyError(f"case-readiness CSV missing columns: {sorted(missing)}")
+        if readiness.case_id.astype(str).duplicated().any():
+            raise ValueError("case-readiness CSV contains duplicate case_id values")
+        ready_case_ids = set(readiness.loc[
+            readiness.ledger_ready_for_generation.fillna(False).astype(bool), "case_id"
+        ].astype(str))
+        frame = frame.loc[frame.case_id.astype(str).isin(ready_case_ids)].copy()
+        if frame.empty:
+            raise ValueError("No reviewed cases are ready for generation after applying case readiness.")
     if "generation_value_review_status" not in frame.columns:
         if "manual_verification_status" not in frame.columns:
             raise KeyError("input needs generation_value_review_status or manual_verification_status")
@@ -132,6 +147,7 @@ def main() -> None:
         "n_generation_facts": int(len(usable)),
         "required_fields": sorted(REQUIRED_FIELDS.difference(optional_fields)),
         "optional_fields": sorted(optional_fields),
+        "case_readiness_path": str(Path(args.case_readiness_path).resolve()) if args.case_readiness_path else None,
         "source_spans_in_output": False,
         "security_note": "Generation values remain source-derived facts and must remain on approved project storage.",
     }

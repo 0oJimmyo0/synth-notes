@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=source_fact_only
-#SBATCH --output=/gpfs/radev/pi/xu_hua/shared/synthnote/physionet.org/files/embedding_elm/open-elm/log/source_grounded_rescue/fact_only_%j.out
-#SBATCH --error=/gpfs/radev/pi/xu_hua/shared/synthnote/physionet.org/files/embedding_elm/open-elm/log/source_grounded_rescue/fact_only_%j.err
+#SBATCH --output=/gpfs/radev/project/xu_hua/mj756/synthnote/log/source_grounded_rescue/fact_only_%j.out
+#SBATCH --error=/gpfs/radev/project/xu_hua/mj756/synthnote/log/source_grounded_rescue/fact_only_%j.err
 #SBATCH --partition=gpu_devel
 #SBATCH --gres=gpu:a40:1
 #SBATCH --cpus-per-task=4
@@ -43,7 +43,7 @@ if [[ "$MODEL_CONDITION" == "checkpoint_8215" ]]; then
   [[ -d "$CHECKPOINT_PATH" ]] || { echo "ERROR: checkpoint directory does not exist: $CHECKPOINT_PATH" >&2; exit 1; }
 fi
 
-mkdir -p "$OUTPUT_DIR" "$OPEN_ELM_DIR/log/source_grounded_rescue"
+mkdir -p "$OUTPUT_DIR"
 module load miniconda
 CONDA_BASE=$(conda info --base)
 source "${CONDA_BASE}/etc/profile.d/conda.sh"

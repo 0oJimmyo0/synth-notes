@@ -203,6 +203,7 @@ def main() -> None:
                         "review_stratum": ledger.get("review_stratum"),
                         "patient_disjoint_from_train": ledger.get("patient_disjoint_from_train"),
                         "arm": arm,
+                        "document_type": args.document_type,
                         "candidate_index": int(candidate_index),
                         **model_metadata,
                         "generation_ledger_sha256": ledger["generation_ledger_sha256"],

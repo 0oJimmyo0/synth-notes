@@ -14,6 +14,17 @@ from datasets import Dataset
 from sklearn.cluster import MiniBatchKMeans
 
 
+# These are structural presence checks, not factuality checks.  The blinded
+# ledger review remains the authority for whether a stated field is supported.
+REQUIRED_FIELD_HEADING_PATTERNS = {
+    "principal_diagnosis": re.compile(r"(?im)^\s*(?:discharge\s+)?diagnos(?:is|es)\s*:"),
+    "hospital_course_events": re.compile(r"(?im)^\s*(?:brief\s+)?hospital\s+course\s*:"),
+    "discharge_medications": re.compile(r"(?im)^\s*(?:discharge\s+)?medications?\s*:"),
+    "disposition": re.compile(r"(?im)^\s*(?:discharge\s+)?disposition\s*:"),
+    "instructions": re.compile(r"(?im)^\s*(?:discharge\s+)?instructions?\s*:"),
+}
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--candidate_manifest_path", required=True)
@@ -26,12 +37,43 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--random_seed", type=int, default=42)
     parser.add_argument("--generation_ledger_path", default=None, help="Optional prompt-safe ledger for deterministic output eligibility checks.")
     parser.add_argument("--enforce_absent_followup_omission", action="store_true")
+    parser.add_argument(
+        "--reject_cap_hits",
+        action="store_true",
+        help="Reject candidates recorded as reaching max_new_tokens before final-output geometry ranking.",
+    )
+    parser.add_argument(
+        "--enforce_required_field_headings",
+        action="store_true",
+        help="Reject outputs missing a recognizable heading for a required ledger field. This is a structural screen, not factual validation.",
+    )
     return parser.parse_args()
 
 
 def normalize(matrix: np.ndarray) -> np.ndarray:
     matrix = np.asarray(matrix, dtype=np.float32)
     return matrix / np.clip(np.linalg.norm(matrix, axis=1, keepdims=True), 1e-12, None)
+
+
+def load_ledger_field_map(ledger_path: str | None) -> dict[str, set[str]]:
+    if not ledger_path:
+        raise ValueError("A generation ledger is required for ledger-aware output eligibility checks.")
+    ledgers = [json.loads(line) for line in Path(ledger_path).read_text().splitlines() if line.strip()]
+    field_map = {
+        str(ledger["case_id"]): {str(fact.get("field")) for fact in ledger.get("facts", [])}
+        for ledger in ledgers
+    }
+    if len(field_map) != len(ledgers):
+        raise ValueError("Generation ledger contains duplicate case IDs.")
+    return field_map
+
+
+def append_rejection_reasons(candidate: pd.DataFrame, rejected: pd.Series, reason: str) -> None:
+    current = candidate.loc[rejected, "selection_rejection_reason"].astype(str)
+    candidate.loc[rejected, "selection_rejection_reason"] = np.where(
+        current.eq(""), reason, current + "|" + reason
+    )
+    candidate.loc[rejected, "eligible_for_selection"] = False
 
 
 def main() -> None:
@@ -45,16 +87,20 @@ def main() -> None:
         raise ValueError("Candidate manifest has duplicate IDs or empty notes.")
     candidate["eligible_for_selection"] = True
     candidate["selection_rejection_reason"] = ""
-    if args.enforce_absent_followup_omission:
-        if not args.generation_ledger_path:
-            raise ValueError("--enforce_absent_followup_omission requires --generation_ledger_path")
-        ledgers = [json.loads(line) for line in Path(args.generation_ledger_path).read_text().splitlines() if line.strip()]
-        follow_up_by_case = {
-            str(ledger["case_id"]): any(str(fact.get("field")) == "follow_up" for fact in ledger.get("facts", []))
-            for ledger in ledgers
-        }
-        if set(candidate.case_id.astype(str)).difference(follow_up_by_case):
+    cap_hit_rejection_count = 0
+    if args.reject_cap_hits:
+        if "hit_max_new_tokens" not in candidate.columns:
+            raise KeyError("--reject_cap_hits requires hit_max_new_tokens in the candidate manifest.")
+        cap_hit = candidate["hit_max_new_tokens"].fillna(False).astype(bool)
+        cap_hit_rejection_count = int(cap_hit.sum())
+        append_rejection_reasons(candidate, cap_hit, "hit_max_new_tokens")
+    ledger_fields_by_case: dict[str, set[str]] = {}
+    if args.enforce_absent_followup_omission or args.enforce_required_field_headings:
+        ledger_fields_by_case = load_ledger_field_map(args.generation_ledger_path)
+        if set(candidate.case_id.astype(str)).difference(ledger_fields_by_case):
             raise ValueError("Candidate manifest includes cases absent from the generation ledger.")
+    if args.enforce_absent_followup_omission:
+        follow_up_by_case = {case_id: "follow_up" in fields for case_id, fields in ledger_fields_by_case.items()}
         candidate["ledger_has_follow_up"] = candidate.case_id.astype(str).map(follow_up_by_case).astype(bool)
         follow_up_pattern = re.compile(r"\bfollow[\s-]*up\b", flags=re.IGNORECASE)
         candidate["unsupported_follow_up_mention"] = [
@@ -62,8 +108,19 @@ def main() -> None:
             for has_follow_up, text in zip(candidate["ledger_has_follow_up"], candidate["generated_text"])
         ]
         rejected = candidate["unsupported_follow_up_mention"]
-        candidate.loc[rejected, "eligible_for_selection"] = False
-        candidate.loc[rejected, "selection_rejection_reason"] = "unsupported_follow_up_mention_without_ledger_fact"
+        append_rejection_reasons(candidate, rejected, "unsupported_follow_up_mention_without_ledger_fact")
+    required_field_rejection_counts: dict[str, int] = {}
+    if args.enforce_required_field_headings:
+        candidate["ledger_required_fields"] = candidate.case_id.astype(str).map(
+            lambda case_id: ",".join(sorted(field for field in ledger_fields_by_case[case_id] if field in REQUIRED_FIELD_HEADING_PATTERNS))
+        )
+        for field, pattern in REQUIRED_FIELD_HEADING_PATTERNS.items():
+            required_for_case = candidate.case_id.astype(str).map(lambda case_id: field in ledger_fields_by_case[case_id])
+            has_heading = candidate["generated_text"].astype(str).map(lambda text: bool(pattern.search(text)))
+            missing_heading = required_for_case & ~has_heading
+            candidate[f"missing_{field}_heading"] = missing_heading
+            required_field_rejection_counts[field] = int(missing_heading.sum())
+            append_rejection_reasons(candidate, missing_heading, f"missing_{field}_heading")
     real = Dataset.load_from_disk(args.real_dataset_path)
     real_embeddings = normalize(np.vstack([np.asarray(row["domain_embeddings"][0], dtype=np.float32) for row in real]))
     assignments = pd.read_csv(args.real_cluster_assignments_path).sort_values("dataset_row_id")
@@ -109,7 +166,12 @@ def main() -> None:
         "eligible_candidates": int(candidate["eligible_for_selection"].sum()),
         "rejected_candidates": int((~candidate["eligible_for_selection"]).sum()),
         "anchors_with_eligible_candidate": int(eligible["anchor_id"].nunique()),
-        "selection_filters": {"absent_followup_omission": bool(args.enforce_absent_followup_omission)},
+        "selection_filters": {
+            "absent_followup_omission": bool(args.enforce_absent_followup_omission),
+            "required_field_headings": bool(args.enforce_required_field_headings),
+        },
+        "required_field_heading_rejection_counts": required_field_rejection_counts,
+        "cap_hit_rejection_count": cap_hit_rejection_count,
     }
     (out / "fact_only_geometry_selection_summary.json").write_text(json.dumps(summary, indent=2) + "\n")
     print(json.dumps(summary, indent=2))
