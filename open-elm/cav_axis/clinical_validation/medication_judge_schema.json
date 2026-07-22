@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Ledger-grounded medication reconciliation judgement",
+  "type": "object",
+  "required": [
+    "ledger_medications",
+    "note_medication_claims",
+    "ledger_to_note_alignment",
+    "missing_ledger_medications",
+    "unsupported_note_medications",
+    "contradictions",
+    "medication_reconciliation_pass",
+    "final_reject"
+  ],
+  "properties": {
+    "ledger_medications": {"type": "array", "items": {"type": "object"}},
+    "note_medication_claims": {"type": "array", "items": {"type": "object"}},
+    "ledger_to_note_alignment": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["fact_id", "status"],
+        "properties": {
+          "fact_id": {"type": "string"},
+          "status": {
+            "type": "string",
+            "enum": [
+              "supported_exact", "supported_equivalent", "missing",
+              "unsupported_addition", "identity_contradiction",
+              "dose_contradiction", "route_contradiction",
+              "frequency_contradiction", "action_contradiction", "uncertain"
+            ]
+          },
+          "note_span": {"type": "string"},
+          "rationale": {"type": "string"}
+        }
+      }
+    },
+    "missing_ledger_medications": {"type": "array", "items": {"type": "object"}},
+    "unsupported_note_medications": {"type": "array", "items": {"type": "object"}},
+    "contradictions": {"type": "array", "items": {"type": "object"}},
+    "medication_reconciliation_pass": {"type": "boolean"},
+    "final_reject": {"type": "boolean"}
+  },
+  "additionalProperties": false
+}
