@@ -1,0 +1,40 @@
+{
+  "title": "Compact evidence-first medication reconciliation decision",
+  "type": "object",
+  "required": [
+    "findings",
+    "medication_reconciliation_pass",
+    "final_reject"
+  ],
+  "properties": {
+    "findings": {
+      "type": "array",
+      "maxItems": 12,
+      "items": {
+        "type": "object",
+        "required": ["category", "ledger_fact_id", "note_evidence", "material", "rationale"],
+        "properties": {
+          "category": {
+            "type": "string",
+            "enum": [
+              "omission",
+              "unsupported_addition",
+              "action_contradiction",
+              "dose_route_frequency_contradiction",
+              "none",
+              "uncertain"
+            ]
+          },
+          "ledger_fact_id": {"type": ["string", "null"]},
+          "note_evidence": {"type": "string"},
+          "material": {"type": "boolean"},
+          "rationale": {"type": "string"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "medication_reconciliation_pass": {"type": "boolean"},
+    "final_reject": {"type": "boolean"}
+  },
+  "additionalProperties": false
+}

@@ -2105,3 +2105,48 @@ New package boundary:
 - Both errors were target-basin candidates but were already structurally ineligible. This is compatible with the current deterministic eligibility screen reducing risk, but does not validate it as a medication-safety gate: the sample is deliberately stratified, repeated anchors are present, and the exploratory eligible/ineligible comparison is underpowered.
 - The 40 new cases exclude the 20 previous selected cluster-25 outputs. They have been combined with those 20 into a 60-task restricted cluster-25 development set at `$DATAHOME/clinical_validation/medication_judge_v1/development_combined60/`. It is for prompt/schema/model calibration only. Cluster 11 remains frozen as the 15-note held-out evaluation set.
 - Next decision point: provision an approved independent local instruction-following judge, calibrate only on the cluster-25 development data, freeze all settings, then run the cluster-11 set once with three deterministic repeats. A judge result is feasibility evidence only; a fresh third-region prospective study is required before prospective automatic rejection.
+
+## July 22 MedGemma local-judge provisioning plan
+
+- Previous local-judge provisioning and implementation are stopped. The Phase 3a local medication-reconciliation judge is now `google/medgemma-27b-text-it`, a gated model that must be accessed only after the user accepts its Hugging Face terms and supplies an authorized read token during provisioning.
+- No token was available to the current session, so gated access was not tested and no MedGemma files were downloaded. No bypass attempt was made. The model-only target is `/gpfs/radev/scratch/xu_hua/shared/models/medgemma-27b-text-it/<revision>`; scratch may hold only nonclinical model weights. All MIMIC-derived ledgers, task JSONL, judge outputs, labels, and reports remain on approved PI project storage.
+- `clinical_validation/provision_medgemma_snapshot.py` and `verify_medgemma_install.py` now provide model provisioning and verification. The provisioner resolves and records an authenticated immutable revision, writes SHA-256 checksums and a token-free manifest; the verifier performs offline local Gemma-family BF16 loading before any restricted task is allowed.
+- A new `medgemma_judge` Conda environment will be created separately from the frozen `elm` environment. The mandatory order is authenticated model provisioning, offline BF16 verification, fabricated nonclinical medication-reconciliation smoke tests, then cluster-25 development calibration. Cluster 11 remains locked until calibration settings are frozen.
+
+## July 22 MedGemma gated-access preflight blocked
+
+- A temporary Hugging Face token resolved MedGemma metadata and revision `5b667cf2ddcf064085bc90952edb35a0edbfb79c`, but content download returned `GatedRepoError` (HTTP 401). This means model terms and/or token repository authorization are not yet confirmed for that account. No bypass was attempted; only the public `README.md` was written under the target revision and no weights were downloaded.
+- `provision_medgemma_snapshot.py` now prefers the temporary `HF_TOKEN` over any persisted token and performs an authenticated `.gitattributes` content probe before creating/downloading a full snapshot. It raises a clear permission error if terms or read access are missing.
+- The unused `qwen3_judge` Conda environment was removed at the user's request. Qwen scratch directories were deliberately retained because their deletion was not requested.
+
+## July 22 MedGemma snapshot provisioned; BF16 verification is next
+
+- Authenticated provisioning subsequently completed at immutable revision `5b667cf2ddcf064085bc90952edb35a0edbfb79c`: the complete 23-file `google/medgemma-27b-text-it` snapshot, SHA-256 checksum file, and token-free provisioning manifest are stored under `/gpfs/radev/scratch/xu_hua/shared/models/medgemma-27b-text-it/5b667cf2ddcf064085bc90952edb35a0edbfb79c`.
+- Added `clinical_validation/medgemma_bf16_verify.slurm`. The immediate next action is an offline model-only BF16 load test using one 80 GB H100. Do not run fabricated smoke inference, cluster-25 calibration, or cluster-11 evaluation until this completes successfully.
+
+## July 22 MedGemma offline BF16 verification passed on two A40 GPUs
+
+- Slurm job `2150498` completed successfully in 3 minutes 9 seconds on two A40 GPUs, entirely offline and without MIMIC-derived input. MedGemma loaded as `gemma3_text` / `Gemma3ForCausalLM`, recognized all 11 weight shards (54,018,098,888 bytes), and split layers across both GPUs.
+- Peak allocated GPU memory was 26.77 GB on GPU 0 and 27.25 GB on GPU 1. This establishes that two A40 GPUs are sufficient for the planned BF16 smoke and judge runs at modest context/output lengths. The nonfatal inherited-Conda and `torch_dtype` warnings were patched for future runs.
+- Next gate is fabricated-only medication-reconciliation smoke testing: validate chat-template operation, evidence extraction, JSON parse/schema behavior, and deterministic output before any cluster-25 development ledger is read.
+
+## July 22 MedGemma compact-judge runtime redesign: preflight required
+
+- The first full development calibration launch used the original unbounded alignment schema and a 4096-token cap. After more than three hours it had not written one completed repeat, despite healthy two-A40 utilization. It is not a viable configuration and must not be used for calibration.
+- The Phase 3a judge has been redesigned as a compact medication-only contract: only verified `discharge_medications` and `instructions` ledger facts are supplied; output is limited to at most 12 evidence-cited discrepancy findings plus pass/reject fields. The compact V2 schema, prompt, semantic validator, per-repeat flush logging, and deterministic subset builder are in `open-elm/cav_axis/clinical_validation/`.
+- The new default cap is 1536 tokens. Any cap-hit, malformed JSON, schema failure, repeat instability, or internally inconsistent decision is review-only and cannot become an automated pass. This is a bounded clinical-judge output, not a discharge-note generation cap.
+- Required execution order: cancel the obsolete job; verify one-H100 BF16 loading; run the exact compact production path on fabricated tasks; run a four-task cluster-25 restricted timing/format preflight with labels removed; only then decide whether the 60-task, three-repeat development calibration is computationally and methodologically ready. Cluster 11 remains locked throughout calibration.
+
+## July 22 MedGemma compact V2 cluster-25 development calibration complete
+
+- Job `2151893` completed in 39 minutes 36 seconds on two A40 GPUs: all 60 cluster-25 development tasks completed across three low-temperature repeats (180 outputs), with batch size two. This demonstrates that the bounded compact workflow is computationally feasible within the six-hour allocation.
+- Technical output quality was high but not perfect: 177/180 schema-valid outputs, 178/180 EOS-terminated outputs, and two 768-token cap hits from the same task. No output reached the per-batch time limit. Eight of 60 notes had repeat decision disagreement; invalidity or instability affected 9/60 (15.0\%), while the conservative final-reject-or-review policy routed 18/60 (30.0\%) notes to human review.
+- Against the existing development severe-error labels, the conservative any-reject/instability/invalid route detected both known severe errors (2/2) but routed 15 additional severe-error-negative notes, giving specificity 43/58 (74.1\%) and a 25.9\% severe-error-negative rejection rate. These are review routes, not proven false positives: many are model-flagged omissions that the original focused human labels may not have adjudicated as material.
+- A label-blind restricted adjudication pack of all 18 routed outputs is available at `.../medgemma_compact_v2_development_2a40_direct/route_adjudication/medication_judge_route_adjudication_BLINDED_TO_PRIOR_LABELS.csv`. Review this before changing the prompt, setting an automatic threshold, or running locked cluster-11 evaluation.
+
+## July 23 MedGemma V2 route adjudication: review routing supported; autonomous rejection not supported
+
+- All 18 V2 development review routes were adjudicated without prior-label access. Every route was appropriate for human review, but only 5/18 model findings were supported and only 4/18 were material. The four material findings include the two original severe calibration errors plus two additional ledger-supported medication omissions (modafinil and furosemide/nadolol).
+- Twelve routes were unsupported overcalls and one remained uncertain because the generated medication section was duplicated and truncated. Main error modes were treating inpatient antimicrobials as discharge medications, inferring active status from conditional instructions, and overlooking complete dose/action evidence in the output.
+- The derived text-free development reference has 60 notes, four material medication discrepancies, 18 adjudicated routes, and one uncertain route. V2 is therefore valid as a conservative human-review router but not as an autonomous final-rejection model.
+- Added compact V3 schema/prompt with a two-tier output: `final_reject` is reserved for supported material discrepancies, while `requires_human_review` retains escalation for uncertainty or possible discrepancies. V3 explicitly distinguishes active discharge medications from inpatient, historical, conditional, and action-only evidence. Next action is V3 development-only calibration with the existing label-free cluster-25 task set and a 1536-token cap, then comparison against the adjudicated four-positive reference. Cluster 11 remains locked.
