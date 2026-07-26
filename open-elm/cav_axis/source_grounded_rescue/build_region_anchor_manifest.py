@@ -17,6 +17,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--real_cluster_assignments_path", required=True)
     parser.add_argument("--output_dir", required=True)
     parser.add_argument("--target_cluster_ids", required=True, help="Comma-separated fixed real-test cluster IDs")
+    parser.add_argument(
+        "--source_split",
+        default="test",
+        help="Split represented by dataset_row_id; required when assignments cover multiple splits.",
+    )
     parser.add_argument("--eligibility_candidates_path", default=None,
                         help="Optional Tier-1 eligibility CSV; only its dataset_row_id values may be selected.")
     parser.add_argument(
@@ -46,8 +51,12 @@ def main() -> None:
     if missing := required - set(frame.columns):
         raise ValueError(f"Cluster assignments missing columns: {sorted(missing)}")
     frame["dataset_row_id"] = pd.to_numeric(frame["dataset_row_id"], errors="raise").astype(int)
+    # In the full-real table dataset_row_id is local to each split. Filter before
+    # uniqueness checks so train/dev/test row IDs are never mixed.
+    if "split" in frame.columns:
+        frame = frame.loc[frame["split"].astype(str) == str(args.source_split)].copy()
     if frame["dataset_row_id"].duplicated().any():
-        raise ValueError("Cluster assignments contain duplicate dataset_row_id values.")
+        raise ValueError(f"Cluster assignments contain duplicate dataset_row_id values within split={args.source_split!r}.")
     candidates = frame.loc[frame["cluster_id"].isin(target_ids)].copy()
     if args.eligibility_candidates_path:
         eligibility = pd.read_csv(Path(args.eligibility_candidates_path).resolve())
@@ -78,13 +87,21 @@ def main() -> None:
         selected = candidates.sort_values("stable_rank").head(args.n_anchors).copy()
     selected = selected.drop(columns="stable_rank").sort_values("dataset_row_id").reset_index(drop=True)
     selected.insert(0, "case_id", [f"region_{'_'.join(map(str, sorted(target_ids)))}_{idx:03d}" for idx in range(1, len(selected) + 1)])
+    # These stable provenance fields are consumed by prompt-safe ledger
+    # serialization and preserve the patient-disjoint review stratum.
+    selected["anchor_id"] = selected["dataset_row_id"].map(lambda value: f"anchor_{int(value)}")
+    selected["review_stratum"] = np.where(
+        selected["patient_disjoint_from_train"].fillna(False).astype(bool),
+        "patient_disjoint",
+        "patient_overlap",
+    )
     selected["target_cluster_ids"] = ",".join(map(str, sorted(target_ids)))
     selected["anchor_selection"] = "deterministic_stratified_target_basin_sample"
     out = Path(args.output_dir).resolve()
     out.mkdir(parents=True, exist_ok=True)
     selected.to_csv(out / "region_anchor_manifest.csv", index=False)
     summary = {
-        "target_cluster_ids": sorted(target_ids), "n_anchors": int(len(selected)),
+        "target_cluster_ids": sorted(target_ids), "source_split": str(args.source_split), "n_anchors": int(len(selected)),
         "patient_disjoint_count": int(selected["patient_disjoint_from_train"].sum()),
         "cluster_counts": {str(key): int(value) for key, value in selected.cluster_id.value_counts().sort_index().items()},
         "seed": int(args.seed), "selection": "deterministic target-basin sample stratified by patient-disjoint status",

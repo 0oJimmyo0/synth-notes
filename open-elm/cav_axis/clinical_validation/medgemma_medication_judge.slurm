@@ -40,6 +40,7 @@ TOP_P=${TOP_P:-0.95}
 BATCH_SIZE=${BATCH_SIZE:-1}
 MAX_GENERATION_SECONDS=${MAX_GENERATION_SECONDS:-0}
 PROGRESS_EVERY=${PROGRESS_EVERY:-10}
+MEDICATION_EVIDENCE_FIELDS=${MEDICATION_EVIDENCE_FIELDS:-discharge_medications,instructions}
 
 nvidia-smi
 python "$REPO_ROOT/open-elm/cav_axis/clinical_validation/run_local_medication_judge.py" \
@@ -59,4 +60,5 @@ python "$REPO_ROOT/open-elm/cav_axis/clinical_validation/run_local_medication_ju
   --batch_size "$BATCH_SIZE" \
   --max_generation_seconds "$MAX_GENERATION_SECONDS" \
   --progress_every "$PROGRESS_EVERY" \
+  --medication_evidence_fields "$MEDICATION_EVIDENCE_FIELDS" \
   --medication_only_evidence

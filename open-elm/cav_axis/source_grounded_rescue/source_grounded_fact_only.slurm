@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=source_fact_only
-#SBATCH --output=/gpfs/radev/project/xu_hua/mj756/synthnote/log/source_grounded_rescue/fact_only_%j.out
-#SBATCH --error=/gpfs/radev/project/xu_hua/mj756/synthnote/log/source_grounded_rescue/fact_only_%j.err
+#SBATCH --output=/gpfs/radev/pi/xu_hua/shared/synthnote/physionet.org/files/embedding_elm/open-elm/cav_axis/source_grounded_rescue/logs/fact_only_%j.out
+#SBATCH --error=/gpfs/radev/pi/xu_hua/shared/synthnote/physionet.org/files/embedding_elm/open-elm/cav_axis/source_grounded_rescue/logs/fact_only_%j.err
 #SBATCH --partition=gpu_devel
 #SBATCH --gres=gpu:a40:1
 #SBATCH --cpus-per-task=4

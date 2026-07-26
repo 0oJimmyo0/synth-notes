@@ -49,6 +49,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--source_split", default="test")
     parser.add_argument("--admissions_path", default=None, help="Optional MIMIC admissions.csv for disposition corroboration.")
     parser.add_argument("--pickle_dir", default=None)
+    parser.add_argument(
+        "--optional_fields",
+        default="",
+        help="Comma-separated fields permitted to be absent, for example follow_up.",
+    )
     parser.add_argument("--max_rows", type=int, default=0, help="Optional deterministic cap for smoke tests; 0 keeps all candidates.")
     return parser.parse_args()
 
@@ -111,11 +116,20 @@ def main() -> None:
     target_ids = {int(value) for value in args.target_cluster_ids.split(",") if value.strip()}
     if not target_ids:
         raise ValueError("--target_cluster_ids must contain at least one ID")
+    optional_fields = {value.strip() for value in args.optional_fields.split(",") if value.strip()}
+    unknown_optional = optional_fields.difference(REQUIRED_FIELDS)
+    if unknown_optional:
+        raise ValueError(f"--optional_fields contains unknown fields: {sorted(unknown_optional)}")
+    active_required_fields = set(REQUIRED_FIELDS).difference(optional_fields)
     assignments = pd.read_csv(Path(args.real_cluster_assignments_path).resolve())
     required = {"dataset_row_id", "cluster_id", "note_id", "hadm_id", "patient_disjoint_from_train"}
     if missing := required - set(assignments.columns):
         raise KeyError(f"cluster assignments missing columns: {sorted(missing)}")
     assignments["dataset_row_id"] = pd.to_numeric(assignments["dataset_row_id"], errors="raise").astype(int)
+    # Full-real coverage assignments contain every split, while source-note
+    # provenance below is intentionally limited to one held-out split.
+    if "split" in assignments.columns:
+        assignments = assignments.loc[assignments["split"].astype(str) == str(args.source_split)].copy()
     candidates = assignments.loc[assignments["cluster_id"].isin(target_ids)].drop_duplicates("dataset_row_id").sort_values("dataset_row_id").copy()
     if args.max_rows:
         candidates = candidates.head(args.max_rows).copy()
@@ -150,7 +164,7 @@ def main() -> None:
         }
         substantive = {field for field, (strength, _) in evidence.items() if strength == "substantive"}
         disposition_supported = evidence["disposition"][0] in {"substantive", "structured_candidate"}
-        complete_review_candidate = set(REQUIRED_FIELDS) - {"disposition"} <= substantive and disposition_supported
+        complete_review_candidate = active_required_fields - {"disposition"} <= substantive and disposition_supported
         partial_review_candidate = {"principal_diagnosis", "hospital_course_events", "discharge_medications"} <= substantive and disposition_supported
         tier = "tier1_complete_review_candidate" if complete_review_candidate else ("tier2_partial_document_candidate" if partial_review_candidate else "tier3_insufficient_source_evidence")
         row = {
@@ -184,6 +198,7 @@ def main() -> None:
     report = {
         "target_cluster_ids": sorted(target_ids), "source_split": str(args.source_split), "n_candidates": int(len(result)),
         "tier_counts": {key: int(value) for key, value in result["eligibility_tier"].value_counts().items()},
+        "required_fields": sorted(active_required_fields), "optional_fields": sorted(optional_fields),
         "manual_ledger_verification_required_for_tier1": True,
         "security_note": "Outputs contain provenance IDs and evidence classes only; no source-note text is exported.",
     }

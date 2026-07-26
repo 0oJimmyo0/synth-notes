@@ -19,6 +19,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--judge_output_path", required=True)
     parser.add_argument("--human_review_csv", action="append", required=True, help="One or more frozen human review CSVs.")
     parser.add_argument("--reference_csv", help="Optional derived reference with blinded_output_id and reference_material_discrepancy.")
+    parser.add_argument(
+        "--positive_label",
+        choices=("severe_failure", "any_medication_error"),
+        default="severe_failure",
+        help="Human-positive definition when --reference_csv is not supplied.",
+    )
     parser.add_argument("--expected_repeats", type=int, default=3, help="Required outputs per note for a complete stability assessment.")
     parser.add_argument("--output_dir", required=True)
     return parser.parse_args()
@@ -54,6 +60,12 @@ def main() -> None:
         human["human_severe_failure"] = human["reference_material_discrepancy"].astype(bool)
         human_label_source = "adjudicated material-discrepancy reference"
         positive_label_name = "reference_material_discrepancy"
+    elif args.positive_label == "any_medication_error":
+        if "human_medication_error_yes_no" not in human.columns:
+            raise KeyError("--positive_label any_medication_error requires human_medication_error_yes_no.")
+        human["human_severe_failure"] = human["human_medication_error_yes_no"].map(yes)
+        human_label_source = "medication-specific human label"
+        positive_label_name = "human_medication_error"
     else:
         human["human_severe_failure"] = human.apply(severe_label, axis=1)
         human_label_source = "medication-specific label when available; otherwise unsupported_major_claim OR critical_omission"
@@ -107,7 +119,7 @@ def main() -> None:
         "reference_positive_count": int(merged.human_severe_failure.sum()),
         "human_label_source": human_label_source,
         "true_positive": tp, "false_negative": fn, "false_positive": fp, "true_negative": tn,
-        "severe_error_sensitivity": safe(tp, tp + fn), "specificity": safe(tn, tn + fp),
+        "positive_label_sensitivity": safe(tp, tp + fn), "specificity": safe(tn, tn + fp),
         "false_rejection_rate": safe(fp, fp + tn),
         "human_review_route_rate": float(merged.judge_review_route.mean()),
         "material_discrepancy_route_sensitivity": safe(int((merged.human_severe_failure & merged.judge_review_route).sum()), int(merged.human_severe_failure.sum())),
@@ -117,6 +129,8 @@ def main() -> None:
         "review_route_rate_from_instability_invalidity_or_incompleteness": float((~merged.judge_label_stable | ~merged.judge_schema_valid | ~merged.judge_complete_repeats).mean()),
         "interpretation": "Feasibility only. Do not use this as an automatic clinical gate without an independent prospective validation region.",
     }
+    if positive_label_name == "human_severe_failure":
+        summary["severe_error_sensitivity"] = summary["positive_label_sensitivity"]
     merged.drop(columns=[c for c in ("verified_fact_ledger", "synthetic_note", "reviewer_notes") if c in merged], errors="ignore").to_csv(output_dir / "medication_judge_human_comparison.csv", index=False)
     (output_dir / "medication_judge_analysis_summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     print(json.dumps(summary, indent=2))

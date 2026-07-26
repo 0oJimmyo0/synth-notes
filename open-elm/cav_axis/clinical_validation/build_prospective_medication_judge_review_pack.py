@@ -15,14 +15,21 @@ from pathlib import Path
 import pandas as pd
 
 
-def medication_evidence(ledger_text: str) -> str:
+def parse_evidence_fields(raw_fields: str) -> set[str]:
+    fields = {field.strip() for field in raw_fields.split(",") if field.strip()}
+    if not fields:
+        raise ValueError("--medication_evidence_fields must name at least one ledger field.")
+    return fields
+
+
+def medication_evidence(ledger_text: str, evidence_fields: set[str]) -> str:
     ledger = json.loads(ledger_text)
     if not isinstance(ledger, list):
         raise ValueError("verified_fact_ledger must be a JSON list")
     relevant = [
         item
         for item in ledger
-        if isinstance(item, dict) and item.get("field") in {"discharge_medications", "instructions"}
+        if isinstance(item, dict) and item.get("field") in evidence_fields
     ]
     return json.dumps(relevant, ensure_ascii=True)
 
@@ -35,9 +42,15 @@ def main() -> None:
     parser.add_argument("--expected_repeats", type=int, default=3)
     parser.add_argument("--n_non_routed_sample", type=int, default=1000)
     parser.add_argument("--seed", type=int, default=20260723)
+    parser.add_argument(
+        "--medication_evidence_fields",
+        default="discharge_medications,instructions",
+        help="Comma-separated verified ledger fields shown to the blinded medication reviewer.",
+    )
     args = parser.parse_args()
     if args.expected_repeats < 1 or args.n_non_routed_sample < 0:
         raise ValueError("expected repeats must be positive and non-routed sample size must be nonnegative")
+    evidence_fields = parse_evidence_fields(args.medication_evidence_fields)
 
     tasks = {
         str(row["blinded_output_id"]): row
@@ -83,7 +96,7 @@ def main() -> None:
             "blinded_output_id": output_id,
             "case_id": str(task.get("case_id", "")),
             "patient_disjoint_from_train": task.get("patient_disjoint_from_train", ""),
-            "verified_medication_evidence": medication_evidence(str(task["verified_fact_ledger"])),
+            "verified_medication_evidence": medication_evidence(str(task["verified_fact_ledger"]), evidence_fields),
             "synthetic_note": str(task["synthetic_note"]),
             "human_medication_error_yes_no": "",
             "human_error_types_pipe_delimited": "",
@@ -101,6 +114,7 @@ def main() -> None:
         "n_non_routed_sampled": len(sampled_non_routed),
         "n_reviewed": len(review_rows),
         "expected_repeats": args.expected_repeats,
+        "medication_evidence_fields": sorted(evidence_fields),
         "blinding": "The review CSV excludes all judge decisions, routes, and findings. Open the key only after labels are finalized.",
         "security_note": "The review CSV contains compact verified medication evidence and synthetic notes; retain it on approved project storage.",
     }

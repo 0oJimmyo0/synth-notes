@@ -25,6 +25,7 @@ from validate_judge_json import validate as validate_judge_payload
 
 SCHEMA_PATH = Path(__file__).with_name("medication_judge_schema.json")
 PROMPT_PATH = Path(__file__).with_name("medication_judge_prompt_v1.txt")
+DEFAULT_MEDICATION_EVIDENCE_FIELDS = ("discharge_medications", "instructions")
 
 
 def parse_args() -> argparse.Namespace:
@@ -45,6 +46,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--temperature", type=float, default=0.2)
     parser.add_argument("--top_p", type=float, default=0.95)
     parser.add_argument("--medication_only_evidence", action="store_true", help="Pass only discharge-medication and medication-action evidence from a JSON ledger.")
+    parser.add_argument(
+        "--medication_evidence_fields",
+        default=",".join(DEFAULT_MEDICATION_EVIDENCE_FIELDS),
+        help=(
+            "Comma-separated verified ledger fields exposed when --medication_only_evidence is set. "
+            "The v3.1 default remains discharge_medications,instructions; v3.2 adds hospital_course_events."
+        ),
+    )
     parser.add_argument("--batch_size", type=int, default=1, help="Number of same-repeat requests decoded together.")
     parser.add_argument("--max_generation_seconds", type=float, default=0.0, help="Per-batch generation time limit; 0 disables it.")
     parser.add_argument(
@@ -56,7 +65,14 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def medication_evidence(ledger_text: str) -> str:
+def parse_evidence_fields(raw_fields: str) -> set[str]:
+    fields = {field.strip() for field in raw_fields.split(",") if field.strip()}
+    if not fields:
+        raise ValueError("--medication_evidence_fields must name at least one ledger field.")
+    return fields
+
+
+def medication_evidence(ledger_text: str, evidence_fields: set[str]) -> str:
     """Retain only ledger fields relevant to medication reconciliation."""
     try:
         ledger = json.loads(ledger_text)
@@ -66,17 +82,23 @@ def medication_evidence(ledger_text: str) -> str:
         raise ValueError("--medication_only_evidence requires a list-valued verified_fact_ledger.")
     relevant = [
         item for item in ledger
-        if isinstance(item, dict) and item.get("field") in {"discharge_medications", "instructions"}
+        if isinstance(item, dict) and item.get("field") in evidence_fields
     ]
     if not relevant:
-        raise ValueError("No discharge_medications or instructions evidence was found in the verified ledger.")
+        raise ValueError("No requested medication evidence fields were found in the verified ledger.")
     return json.dumps(relevant, ensure_ascii=True, separators=(",", ":"))
 
 
-def prompt_for(task: dict[str, object], schema: dict[str, object], template: str, medication_only: bool) -> str:
+def prompt_for(
+    task: dict[str, object],
+    schema: dict[str, object],
+    template: str,
+    medication_only: bool,
+    evidence_fields: set[str],
+) -> str:
     ledger = str(task["verified_fact_ledger"])
     if medication_only:
-        ledger = medication_evidence(ledger)
+        ledger = medication_evidence(ledger, evidence_fields)
     return template.format(
         schema=json.dumps(schema, ensure_ascii=True),
         ledger=ledger,
@@ -139,6 +161,7 @@ def main() -> None:
     missing_placeholders = [item for item in required_placeholders if item not in template]
     if missing_placeholders:
         raise ValueError(f"Prompt template is missing placeholders: {missing_placeholders}")
+    evidence_fields = parse_evidence_fields(args.medication_evidence_fields)
     tasks = [json.loads(line) for line in task_path.read_text(encoding="utf-8").splitlines() if line.strip()]
     tokenizer = AutoTokenizer.from_pretrained(str(model_path), local_files_only=True)
     if tokenizer.pad_token_id is None:
@@ -177,7 +200,7 @@ def main() -> None:
                 rendered = [
                     render_prompt(
                         tokenizer,
-                        prompt_for(task, schema, template, args.medication_only_evidence),
+                        prompt_for(task, schema, template, args.medication_only_evidence, evidence_fields),
                         args,
                     )
                     for task in task_batch
@@ -215,6 +238,7 @@ def main() -> None:
                         "schema_validation_errors": schema_errors,
                         "used_chat_template": args.use_chat_template, "do_sample": args.do_sample,
                         "medication_only_evidence": args.medication_only_evidence,
+                        "medication_evidence_fields": sorted(evidence_fields) if args.medication_only_evidence else None,
                         "temperature": args.temperature if args.do_sample else None,
                         "generated_token_count": token_count,
                         "hit_max_new_tokens": hit_cap,

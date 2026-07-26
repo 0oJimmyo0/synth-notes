@@ -11,7 +11,6 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from datasets import Dataset
-from sklearn.cluster import MiniBatchKMeans
 
 
 # These are structural presence checks, not factuality checks.  The blinded
@@ -31,6 +30,22 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--candidate_embeddings_path", required=True)
     parser.add_argument("--real_dataset_path", required=True)
     parser.add_argument("--real_cluster_assignments_path", required=True)
+    parser.add_argument(
+        "--frozen_centroid_dataset_path",
+        action="append",
+        default=[],
+        metavar="SPLIT=PATH",
+        help=(
+            "Filtered real dataset used to reconstruct frozen cluster centroids. "
+            "Provide once for every split in the frozen assignment table, for example "
+            "--frozen_centroid_dataset_path train=/.../encoded_training_filtered."
+        ),
+    )
+    parser.add_argument(
+        "--source_split",
+        default="test",
+        help="Split represented by --real_dataset_path when a full multi-split assignment table is supplied.",
+    )
     parser.add_argument("--output_dir", required=True)
     parser.add_argument("--target_cluster_ids", default="9,17,29,45")
     parser.add_argument("--n_clusters", type=int, default=50)
@@ -74,6 +89,72 @@ def append_rejection_reasons(candidate: pd.DataFrame, rejected: pd.Series, reaso
         current.eq(""), reason, current + "|" + reason
     )
     candidate.loc[rejected, "eligible_for_selection"] = False
+
+
+def parse_split_dataset_paths(values: list[str]) -> dict[str, Path]:
+    paths: dict[str, Path] = {}
+    for value in values:
+        if "=" not in value:
+            raise ValueError("--frozen_centroid_dataset_path must use SPLIT=PATH format.")
+        split, raw_path = value.split("=", 1)
+        split = split.strip()
+        if not split or not raw_path.strip():
+            raise ValueError("--frozen_centroid_dataset_path must include both a split and a path.")
+        if split in paths:
+            raise ValueError(f"Duplicate frozen centroid dataset path for split {split!r}.")
+        paths[split] = Path(raw_path).resolve()
+    return paths
+
+
+def build_frozen_centers(
+    assignments: pd.DataFrame,
+    split_dataset_paths: dict[str, Path],
+    n_clusters: int,
+) -> tuple[np.ndarray, dict[str, int]]:
+    """Reconstruct centroids in the frozen full-cohort cluster-label space.
+
+    The frozen labels were fitted on all filtered splits jointly. Refitting K-means
+    on one split gives arbitrary label identities, so centroids are instead the
+    normalized mean embeddings of rows assigned to each frozen cluster.
+    """
+    assignment_splits = set(assignments["split"].astype(str))
+    if set(split_dataset_paths) != assignment_splits:
+        raise ValueError(
+            "Frozen centroid datasets must cover exactly the assignment-table splits: "
+            f"expected {sorted(assignment_splits)}, got {sorted(split_dataset_paths)}."
+        )
+
+    sums: np.ndarray | None = None
+    counts = np.zeros(n_clusters, dtype=np.int64)
+    split_counts: dict[str, int] = {}
+    for split, dataset_path in sorted(split_dataset_paths.items()):
+        dataset = Dataset.load_from_disk(str(dataset_path))
+        split_assignments = assignments.loc[assignments["split"].astype(str) == split].copy()
+        split_assignments["dataset_row_id"] = pd.to_numeric(
+            split_assignments["dataset_row_id"], errors="raise"
+        ).astype(int)
+        if split_assignments["dataset_row_id"].duplicated().any():
+            raise ValueError(f"Frozen assignments contain duplicate dataset_row_id values for split {split!r}.")
+        split_assignments = split_assignments.sort_values("dataset_row_id")
+        expected_ids = np.arange(len(dataset), dtype=int)
+        if len(split_assignments) != len(dataset) or not np.array_equal(
+            split_assignments["dataset_row_id"].to_numpy(), expected_ids
+        ):
+            raise ValueError(f"Frozen assignments do not align one-to-one with {split!r} dataset rows.")
+        labels = pd.to_numeric(split_assignments["cluster_id"], errors="raise").astype(int).to_numpy()
+        if labels.min() < 0 or labels.max() >= n_clusters:
+            raise ValueError(f"Frozen cluster IDs for split {split!r} are outside [0, {n_clusters}).")
+        embeddings = normalize(np.vstack([np.asarray(row["domain_embeddings"][0], dtype=np.float32) for row in dataset]))
+        if sums is None:
+            sums = np.zeros((n_clusters, embeddings.shape[1]), dtype=np.float64)
+        np.add.at(sums, labels, embeddings)
+        counts += np.bincount(labels, minlength=n_clusters)
+        split_counts[split] = int(len(dataset))
+
+    if sums is None or np.any(counts == 0):
+        missing = np.flatnonzero(counts == 0).tolist()
+        raise ValueError(f"Cannot construct frozen centroids; clusters without rows: {missing}")
+    return normalize(sums.astype(np.float32)), split_counts
 
 
 def main() -> None:
@@ -121,14 +202,22 @@ def main() -> None:
             candidate[f"missing_{field}_heading"] = missing_heading
             required_field_rejection_counts[field] = int(missing_heading.sum())
             append_rejection_reasons(candidate, missing_heading, f"missing_{field}_heading")
-    real = Dataset.load_from_disk(args.real_dataset_path)
-    real_embeddings = normalize(np.vstack([np.asarray(row["domain_embeddings"][0], dtype=np.float32) for row in real]))
-    assignments = pd.read_csv(args.real_cluster_assignments_path).sort_values("dataset_row_id")
-    kmeans = MiniBatchKMeans(n_clusters=args.n_clusters, random_state=args.random_seed, batch_size=2048, n_init="auto")
-    labels = kmeans.fit_predict(real_embeddings)
-    if not np.array_equal(labels, assignments["cluster_id"].to_numpy()):
-        raise ValueError("Refit clusters differ from frozen real cluster assignments.")
-    centers = normalize(kmeans.cluster_centers_)
+    assignments = pd.read_csv(args.real_cluster_assignments_path)
+    required_assignment_columns = {"split", "dataset_row_id", "cluster_id"}
+    if missing := required_assignment_columns.difference(assignments.columns):
+        raise KeyError(f"Frozen assignment table is missing columns: {sorted(missing)}")
+    source_assignments = assignments.loc[assignments["split"].astype(str) == args.source_split].copy()
+    source_dataset = Dataset.load_from_disk(args.real_dataset_path)
+    if len(source_assignments) != len(source_dataset):
+        raise ValueError(
+            "Frozen assignment row count does not match --real_dataset_path for the requested source split: "
+            f"{len(source_assignments)} vs {len(source_dataset)}."
+        )
+    centers, frozen_centroid_split_counts = build_frozen_centers(
+        assignments=assignments,
+        split_dataset_paths=parse_split_dataset_paths(args.frozen_centroid_dataset_path),
+        n_clusters=args.n_clusters,
+    )
     scores = embeddings @ centers.T
     candidate["output_cluster_id"] = scores.argmax(axis=1).astype(int)
     candidate["output_in_target_basin"] = candidate["output_cluster_id"].isin(target_ids)
@@ -161,6 +250,7 @@ def main() -> None:
     summary = {
         "candidate_rows": int(len(candidate)), "anchors": int(candidate["anchor_id"].nunique()),
         "target_cluster_ids": sorted(target_ids), "candidate_target_basin_rate": float(candidate["output_in_target_basin"].mean()),
+        "frozen_centroid_split_counts": frozen_centroid_split_counts,
         "selected_target_basin_rate": float(selected["output_in_target_basin"].mean()),
         "anchors_with_target_candidate": int(candidate.groupby("anchor_id")["output_in_target_basin"].any().sum()),
         "eligible_candidates": int(candidate["eligible_for_selection"].sum()),
