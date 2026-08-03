@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Transition Note Critical-Fact Contract v1",
+  "type": "object",
+  "required": ["case_id", "contract_version", "facts"],
+  "properties": {
+    "case_id": {"type": "string"},
+    "contract_version": {"const": "transition_note_contract_v1"},
+    "facts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["fact_id", "field", "section", "status", "generation_value"],
+        "properties": {
+          "fact_id": {"type": "string"},
+          "field": {"type": "string"},
+          "section": {"type": "string"},
+          "status": {"enum": ["required", "optional", "historical_context_only", "explicit_none"]},
+          "generation_value": {"type": "string"},
+          "medication_components": {"type": "object"}
+        }
+      }
+    }
+  }
+}

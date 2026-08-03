@@ -16,7 +16,11 @@ umask 007
 module load miniconda
 CONDA_BASE=$(conda info --base)
 source "${CONDA_BASE}/etc/profile.d/conda.sh"
-unset CONDA_PREFIX CONDA_DEFAULT_ENV CONDA_PROMPT_MODIFIER CONDA_SHLVL
+# Batch jobs inherit the submit shell's Conda variables. Do not unset them:
+# doing so leaves Conda unable to deactivate the inherited environment.
+if [[ -n "${CONDA_PREFIX:-}" ]]; then
+  conda deactivate || true
+fi
 conda activate medgemma_judge
 
 export HF_HUB_OFFLINE=1
@@ -29,8 +33,10 @@ REPO_ROOT=/gpfs/radev/pi/xu_hua/shared/synthnote/physionet.org/files/embedding_e
 MODEL_PATH=${MODEL_PATH:?Set the local MedGemma snapshot path.}
 TASK_PATH=${TASK_PATH:?Set the restricted task JSONL path on approved project storage.}
 OUTPUT_PATH=${OUTPUT_PATH:?Set an output JSONL path on approved project storage.}
-PROMPT_PATH=${PROMPT_PATH:-$REPO_ROOT/open-elm/cav_axis/clinical_validation/medication_judge_prompt_v2_compact.txt}
-SCHEMA_PATH=${SCHEMA_PATH:-$REPO_ROOT/open-elm/cav_axis/clinical_validation/medication_judge_compact_schema_v2.json}
+# v3.3 explicitly separates active discharge therapy, historical inpatient
+# treatment, and evidence components that are genuinely unspecified.
+PROMPT_PATH=${PROMPT_PATH:-$REPO_ROOT/open-elm/cav_axis/clinical_validation/medication_judge_prompt_v3_3_discharge_state.txt}
+SCHEMA_PATH=${SCHEMA_PATH:-$REPO_ROOT/open-elm/cav_axis/clinical_validation/medication_judge_compact_schema_v3.json}
 REPEATS=${REPEATS:-3}
 # The compact contract is bounded to 12 findings. Use 1536 tokens to leave
 # headroom for evidence citations; cap hits remain review-only outcomes.
@@ -43,6 +49,22 @@ PROGRESS_EVERY=${PROGRESS_EVERY:-10}
 MEDICATION_EVIDENCE_FIELDS=${MEDICATION_EVIDENCE_FIELDS:-discharge_medications,instructions}
 
 nvidia-smi
+# The runner uses device_map=auto, which shards MedGemma-27B BF16 across the
+# two allocated A40s. Require two 44 GB-or-larger GPUs before loading weights.
+mapfile -t GPU_MEMORY_MIBS < <(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits | tr -d ' ')
+GPU_COUNT=${#GPU_MEMORY_MIBS[@]}
+GPU_TOTAL_MIB=0
+for memory_mib in "${GPU_MEMORY_MIBS[@]}"; do
+  if [[ ! "$memory_mib" =~ ^[0-9]+$ ]]; then
+    echo "ERROR: Could not read GPU memory capacity." >&2
+    exit 1
+  fi
+  GPU_TOTAL_MIB=$((GPU_TOTAL_MIB + memory_mib))
+done
+if (( GPU_COUNT < 2 )) || (( GPU_MEMORY_MIBS[0] < 44000 )) || (( GPU_MEMORY_MIBS[1] < 44000 )) || (( GPU_TOTAL_MIB < 88000 )); then
+  echo "ERROR: MedGemma-27B BF16 requires two 44 GB-or-larger GPUs; detected ${GPU_COUNT} GPUs totaling ${GPU_TOTAL_MIB} MiB." >&2
+  exit 1
+fi
 python "$REPO_ROOT/open-elm/cav_axis/clinical_validation/run_local_medication_judge.py" \
   --task_path "$TASK_PATH" \
   --model_path "$MODEL_PATH" \

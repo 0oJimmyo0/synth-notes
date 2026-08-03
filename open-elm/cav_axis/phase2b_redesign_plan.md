@@ -1,4 +1,96 @@
-# Phase 2b Redesign Plan
+# Research Plan: Contract-First Sparse-Region Enrichment
+
+## Current Direction
+
+This document preserves the retired Phase 2b steering plan below for
+provenance. It is superseded by the following active strategy.
+
+### Primary Method
+
+1. Identify a sparse real-note region using frozen BGE manifold clusters.
+2. Select leakage-aware held-out anchors with adequate source-evidence
+   eligibility.
+3. Create a clinician-reviewed fact contract.
+4. Deterministically render diagnosis, active discharge medications,
+   disposition, and instructions from that contract.
+5. Use ELM only for constrained hospital-course prose.
+6. Re-embed all candidates with BGE and select outputs that land in the frozen
+   target region while passing deterministic structural and contract checks.
+7. Use blinded human review as the final clinical-quality endpoint.
+
+### Evidence To Date
+
+- Decoder round-trip audits ruled out inference-time embedding steering as the
+  primary enrichment mechanism.
+- Contract-first hybrid generation improved strict review quality in cluster-36
+  development and achieved 10/12 strict passes in a fresh cluster-25
+  contract-resolved pilot.
+- These are feasibility findings. The next experiment must use fresh,
+  anchor-disjoint scale anchors with no method changes.
+
+### MedGemma Role
+
+MedGemma-27B is locally provisioned, offline-only, and distinct from ELM. Its
+current free-form medication-reconciliation judge is not safe for automatic
+decisions: its finding bundles lacked grounding and fabricated v3.3/v3.4 tests
+failed schema and unknown-component criteria.
+
+The allowed redesign is a citation-bound evidence-alignment assistant:
+
+- input: explicit active-discharge obligations, historical-context-only facts,
+  and unknown components from the reviewed contract;
+- output: one fixed label per obligation (`present_supported`, `missing`,
+  `unsupported`, or `uncertain`) plus contract ID and note span;
+- deterministic code, not the LLM, determines accept/review routing;
+- `uncertain` and unavailable components always route to humans;
+- no LLM editing until this assistant passes fabricated tests and an independent
+  prospective clinical validation.
+
+### Immediate Ordered Steps
+
+1. Freeze MedGemma v3.2-v3.4 results as exploratory.
+2. Build 30 fresh, anchor-disjoint cluster-25 anchors from the Tier-1 reserve,
+   excluding all prior region-25 anchors.
+3. Complete source-ledger and contract review before generation.
+4. Run frozen hybrid v3 generation, BGE re-embedding, geometry selection,
+   deterministic contract audit, and blinded full-note review.
+5. Report exact counts, patient-disjoint results, selection yield, and review
+   confidence intervals as feasibility evidence.
+6. In parallel, build a fabricated contract benchmark for the redesigned LLM
+   evidence-alignment task. Do not rerun it on clinical data until it meets its
+   predeclared release criteria.
+
+Status: the v2 fabricated alignment benchmark passed all six cases with valid,
+stable, exact labels. The next LLM step is one locked 12-note calibration using
+the frozen cluster-25 contract and pre-existing human labels. It cannot be
+reported as independent clinical validation.
+
+Update: the contract-matched blinded review is complete. Of 92 obligations,
+91 were labeled `present_supported` and one was `unsupported`. MedGemma had
+complete schema-valid three-repeat coverage for only 63 obligations. It agreed
+on 62/63 covered items but missed the sole unsupported generic claim ("Resume
+preadmission medications"), giving observed non-present sensitivity of 0/1.
+The 98.4% covered agreement is therefore a class-imbalance result, not a
+clinical-safety claim. Before any new clinical LLM evaluation, deterministic
+code must route generic catch-all active-discharge medication claims for human
+review and pass an expanded fabricated adversarial benchmark.
+
+Implemented safeguard: the deterministic contract audit now routes generic
+"resume/continue preadmission, home, or prior medications" claims from either
+the discharge-medication or instruction section. It caught the exact locked
+calibration `ledger_018` miss. This route is independent of MedGemma and is a
+human-review safeguard, not automatic note acceptance or rejection.
+
+### Manuscript Boundary
+
+The main manuscript claim is a source-grounded, human-audited feasibility
+framework for enriching sparse clinical-note regions. It must not claim clinical
+deployment, autonomous medication reconciliation, privacy safety, or
+cohort-wide benefit without a larger independent validation.
+
+---
+
+# Archived Phase 2b Steering Redesign Plan
 
 ## Objective
 
@@ -238,4 +330,3 @@ Do not move to LLM judge/editor until a redesigned direction wins against both c
 1. implement `build_local_steering_directions.py`
 2. extend `build_shifted_embedding_dataset.py` to accept saved direction vectors
 3. run a first redesigned pilot on `cluster29`
-

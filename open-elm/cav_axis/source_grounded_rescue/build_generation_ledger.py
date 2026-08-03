@@ -41,6 +41,11 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     frame = pd.read_csv(Path(args.review_template_csv).resolve())
+    # Some reviewed exports name the clinician-approved compact text
+    # `effective_reviewed_value`. Normalize it here rather than requiring a
+    # manual spreadsheet edit that could alter the review provenance.
+    if "generation_value" not in frame.columns and "effective_reviewed_value" in frame.columns:
+        frame["generation_value"] = frame["effective_reviewed_value"]
     required = {"case_id", "fact_id", "field", "generation_value"}
     missing = required.difference(frame.columns)
     if missing:
@@ -66,7 +71,9 @@ def main() -> None:
         if "manual_verification_status" not in frame.columns:
             raise KeyError("input needs generation_value_review_status or manual_verification_status")
         # Reviewed ledgers can be serialized directly when reviewers supplied generation_value.
-        frame["generation_value_review_status"] = frame["manual_verification_status"].replace({"omitted": "omit"})
+        frame["generation_value_review_status"] = frame["manual_verification_status"].replace({
+            "omitted": "omit", "rejected": "omit",
+        })
     if args.anchor_manifest_path:
         anchors = pd.read_csv(Path(args.anchor_manifest_path).resolve())
         if "dataset_row_id" not in anchors.columns or "dataset_row_id" not in frame.columns:

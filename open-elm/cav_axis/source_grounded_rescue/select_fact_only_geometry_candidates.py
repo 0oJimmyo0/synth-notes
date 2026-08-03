@@ -50,12 +50,35 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--target_cluster_ids", default="9,17,29,45")
     parser.add_argument("--n_clusters", type=int, default=50)
     parser.add_argument("--random_seed", type=int, default=42)
+    parser.add_argument(
+        "--centroid_batch_size",
+        type=int,
+        default=4096,
+        help="Rows per batch while reconstructing frozen real-data centroids.",
+    )
     parser.add_argument("--generation_ledger_path", default=None, help="Optional prompt-safe ledger for deterministic output eligibility checks.")
+    parser.add_argument("--contract_note_coverage_csv", default=None,
+                        help="Optional per-output contract audit. Only contract-passing outputs may reach geometry ranking.")
     parser.add_argument("--enforce_absent_followup_omission", action="store_true")
+    parser.add_argument(
+        "--enforce_absent_followup_heading",
+        action="store_true",
+        help="Reject only an unsupported dedicated Follow-up heading. Use for hybrid notes, where verified instructions may mention follow-up actions.",
+    )
     parser.add_argument(
         "--reject_cap_hits",
         action="store_true",
         help="Reject candidates recorded as reaching max_new_tokens before final-output geometry ranking.",
+    )
+    parser.add_argument(
+        "--reject_course_constraint_failures",
+        action="store_true",
+        help="Reject hybrid candidates whose generated hospital course violated its no-pronoun/no-disposition constraint.",
+    )
+    parser.add_argument(
+        "--reject_course_format_artifacts",
+        action="store_true",
+        help="Reject hybrid courses containing unfinished bracketed drafting artifacts.",
     )
     parser.add_argument(
         "--enforce_required_field_headings",
@@ -110,6 +133,7 @@ def build_frozen_centers(
     assignments: pd.DataFrame,
     split_dataset_paths: dict[str, Path],
     n_clusters: int,
+    batch_size: int,
 ) -> tuple[np.ndarray, dict[str, int]]:
     """Reconstruct centroids in the frozen full-cohort cluster-label space.
 
@@ -144,10 +168,18 @@ def build_frozen_centers(
         labels = pd.to_numeric(split_assignments["cluster_id"], errors="raise").astype(int).to_numpy()
         if labels.min() < 0 or labels.max() >= n_clusters:
             raise ValueError(f"Frozen cluster IDs for split {split!r} are outside [0, {n_clusters}).")
-        embeddings = normalize(np.vstack([np.asarray(row["domain_embeddings"][0], dtype=np.float32) for row in dataset]))
-        if sums is None:
-            sums = np.zeros((n_clusters, embeddings.shape[1]), dtype=np.float64)
-        np.add.at(sums, labels, embeddings)
+        # Stream batches to avoid materializing the full train split in the
+        # interactive CPU memory cgroup. Assignment IDs were validated above,
+        # so positional slices preserve the frozen label-to-embedding mapping.
+        for start in range(0, len(dataset), batch_size):
+            stop = min(start + batch_size, len(dataset))
+            batch_values = dataset[start:stop]["domain_embeddings"]
+            embeddings = normalize(np.vstack([
+                np.asarray(value[0], dtype=np.float32) for value in batch_values
+            ]))
+            if sums is None:
+                sums = np.zeros((n_clusters, embeddings.shape[1]), dtype=np.float64)
+            np.add.at(sums, labels[start:stop], embeddings)
         counts += np.bincount(labels, minlength=n_clusters)
         split_counts[split] = int(len(dataset))
 
@@ -166,8 +198,25 @@ def main() -> None:
         raise ValueError("Candidate manifest and embedding matrix row counts differ.")
     if candidate["rescue_id"].duplicated().any() or candidate["generated_text"].astype(str).str.strip().eq("").any():
         raise ValueError("Candidate manifest has duplicate IDs or empty notes.")
+    # Deterministic geometry-diagnostic representations have one row per
+    # anchor, so they do not carry sampled-generation candidate indices.
+    if "candidate_index" not in candidate.columns:
+        candidate["candidate_index"] = 0
     candidate["eligible_for_selection"] = True
     candidate["selection_rejection_reason"] = ""
+    if args.contract_note_coverage_csv:
+        contract = pd.read_csv(Path(args.contract_note_coverage_csv).resolve())
+        required_contract = {"candidate_id", "contract_pass"}
+        if missing := required_contract.difference(contract.columns):
+            raise KeyError(f"contract coverage is missing columns: {sorted(missing)}")
+        if contract.candidate_id.astype(str).duplicated().any():
+            raise ValueError("contract coverage contains duplicate candidate_id values")
+        contract_map = contract.set_index(contract.candidate_id.astype(str)).contract_pass.astype(bool)
+        candidate["contract_pass"] = candidate.rescue_id.astype(str).map(contract_map)
+        if candidate.contract_pass.isna().any():
+            missing = candidate.loc[candidate.contract_pass.isna(), "rescue_id"].astype(str).head().tolist()
+            raise ValueError(f"candidate manifest has outputs absent from contract audit, for example {missing}")
+        append_rejection_reasons(candidate, ~candidate.contract_pass, "contract_audit_failure")
     cap_hit_rejection_count = 0
     if args.reject_cap_hits:
         if "hit_max_new_tokens" not in candidate.columns:
@@ -175,8 +224,22 @@ def main() -> None:
         cap_hit = candidate["hit_max_new_tokens"].fillna(False).astype(bool)
         cap_hit_rejection_count = int(cap_hit.sum())
         append_rejection_reasons(candidate, cap_hit, "hit_max_new_tokens")
+    course_constraint_rejection_count = 0
+    if args.reject_course_constraint_failures:
+        if "course_constraint_pass" not in candidate.columns:
+            raise KeyError("--reject_course_constraint_failures requires course_constraint_pass in the candidate manifest.")
+        course_constraint_fail = ~candidate["course_constraint_pass"].fillna(False).astype(bool)
+        course_constraint_rejection_count = int(course_constraint_fail.sum())
+        append_rejection_reasons(candidate, course_constraint_fail, "hospital_course_constraint_failure")
+    course_format_artifact_rejection_count = 0
+    if args.reject_course_format_artifacts:
+        if "hospital_course_text" not in candidate.columns:
+            raise KeyError("--reject_course_format_artifacts requires hospital_course_text in the candidate manifest.")
+        course_format_artifact = candidate["hospital_course_text"].fillna("").astype(str).str.contains(r"[\[\]]", regex=True)
+        course_format_artifact_rejection_count = int(course_format_artifact.sum())
+        append_rejection_reasons(candidate, course_format_artifact, "hospital_course_format_artifact")
     ledger_fields_by_case: dict[str, set[str]] = {}
-    if args.enforce_absent_followup_omission or args.enforce_required_field_headings:
+    if args.enforce_absent_followup_omission or args.enforce_absent_followup_heading or args.enforce_required_field_headings:
         ledger_fields_by_case = load_ledger_field_map(args.generation_ledger_path)
         if set(candidate.case_id.astype(str)).difference(ledger_fields_by_case):
             raise ValueError("Candidate manifest includes cases absent from the generation ledger.")
@@ -190,6 +253,15 @@ def main() -> None:
         ]
         rejected = candidate["unsupported_follow_up_mention"]
         append_rejection_reasons(candidate, rejected, "unsupported_follow_up_mention_without_ledger_fact")
+    if args.enforce_absent_followup_heading:
+        follow_up_by_case = {case_id: "follow_up" in fields for case_id, fields in ledger_fields_by_case.items()}
+        candidate["ledger_has_follow_up"] = candidate.case_id.astype(str).map(follow_up_by_case).astype(bool)
+        follow_up_heading = re.compile(r"(?im)^\s*(?:follow[\s-]*up)\s*:")
+        candidate["unsupported_follow_up_heading"] = [
+            (not has_follow_up) and bool(follow_up_heading.search(str(text)))
+            for has_follow_up, text in zip(candidate["ledger_has_follow_up"], candidate["generated_text"])
+        ]
+        append_rejection_reasons(candidate, candidate["unsupported_follow_up_heading"], "unsupported_follow_up_heading_without_ledger_fact")
     required_field_rejection_counts: dict[str, int] = {}
     if args.enforce_required_field_headings:
         candidate["ledger_required_fields"] = candidate.case_id.astype(str).map(
@@ -217,6 +289,7 @@ def main() -> None:
         assignments=assignments,
         split_dataset_paths=parse_split_dataset_paths(args.frozen_centroid_dataset_path),
         n_clusters=args.n_clusters,
+        batch_size=args.centroid_batch_size,
     )
     scores = embeddings @ centers.T
     candidate["output_cluster_id"] = scores.argmax(axis=1).astype(int)
@@ -258,10 +331,13 @@ def main() -> None:
         "anchors_with_eligible_candidate": int(eligible["anchor_id"].nunique()),
         "selection_filters": {
             "absent_followup_omission": bool(args.enforce_absent_followup_omission),
+            "absent_followup_heading": bool(args.enforce_absent_followup_heading),
             "required_field_headings": bool(args.enforce_required_field_headings),
         },
         "required_field_heading_rejection_counts": required_field_rejection_counts,
         "cap_hit_rejection_count": cap_hit_rejection_count,
+        "course_constraint_rejection_count": course_constraint_rejection_count,
+        "course_format_artifact_rejection_count": course_format_artifact_rejection_count,
     }
     (out / "fact_only_geometry_selection_summary.json").write_text(json.dumps(summary, indent=2) + "\n")
     print(json.dumps(summary, indent=2))

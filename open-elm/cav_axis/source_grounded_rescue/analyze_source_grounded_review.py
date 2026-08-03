@@ -64,7 +64,14 @@ def main() -> None:
         allowed = {"yes", "no"}
         if column in {"major_procedures_supported_yes_no_not_applicable", "follow_up_supported_yes_no"}:
             allowed.add("not_applicable")
-        value = merged[column].fillna("").astype(str).str.strip().str.lower()
+        value = (
+            merged[column]
+            .fillna("")
+            .astype(str)
+            .str.strip()
+            .str.lower()
+            .replace({"supported": "yes", "unsupported": "no"})
+        )
         invalid = set(value).difference(allowed)
         if invalid:
             raise ValueError(f"{column} has invalid values: {sorted(invalid)}")

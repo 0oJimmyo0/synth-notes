@@ -55,13 +55,34 @@ def main() -> None:
     for case_id, group in frame.groupby("case_id", sort=True):
         verified = group.loc[group.manual_verification_status.isin(["verified", "corrected"])]
         verified_fields = set(verified.field.astype(str))
+        reviewer_case_status = ""
+        reviewer_blocking_reasons = ""
+        if "case_validation_status" in group.columns:
+            statuses = {
+                str(value).strip().lower()
+                for value in group.case_validation_status.fillna("")
+                if str(value).strip()
+            }
+            if len(statuses) > 1:
+                raise ValueError(f"case_id={case_id} has inconsistent case_validation_status values: {sorted(statuses)}")
+            reviewer_case_status = next(iter(statuses), "")
+        if "case_blocking_reasons" in group.columns:
+            reasons = [str(value).strip() for value in group.case_blocking_reasons.fillna("") if str(value).strip()]
+            reviewer_blocking_reasons = " | ".join(dict.fromkeys(reasons))
+        reviewer_blocks = bool(reviewer_case_status) and reviewer_case_status != "validated_for_generation"
+        missing_fields = active_required_fields.difference(verified_fields)
         per_case.append({
             "case_id": case_id,
             "n_facts": int(len(group)),
             "n_verified_or_corrected": int(len(verified)),
             "pending_or_rejected_facts": int((~group.manual_verification_status.isin(["verified", "corrected"])).sum()),
-            "missing_required_fields": "|".join(sorted(active_required_fields.difference(verified_fields))),
-            "ledger_ready_for_generation": not bool(active_required_fields.difference(verified_fields)),
+            "missing_required_fields": "|".join(sorted(missing_fields)),
+            "reviewer_case_validation_status": reviewer_case_status,
+            "reviewer_case_blocking_reasons": reviewer_blocking_reasons,
+            "reviewer_case_blocked": reviewer_blocks,
+            # Explicit clinician case-level blocks cover unsafe obligations that
+            # cannot be represented by mere section-level presence checks.
+            "ledger_ready_for_generation": not bool(missing_fields) and not reviewer_blocks,
         })
     cases = pd.DataFrame(per_case)
     cases.to_csv(output_dir / "source_fact_ledger_case_readiness.csv", index=False)

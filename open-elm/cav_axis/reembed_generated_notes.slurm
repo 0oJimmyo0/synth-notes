@@ -2,7 +2,7 @@
 #SBATCH --job-name=elm_reembed_syn
 #SBATCH --output=/gpfs/radev/pi/xu_hua/shared/synthnote/physionet.org/files/embedding_elm/open-elm/cav_axis/logs/reembed_generated_notes_%j.out
 #SBATCH --error=/gpfs/radev/pi/xu_hua/shared/synthnote/physionet.org/files/embedding_elm/open-elm/cav_axis/logs/reembed_generated_notes_%j.err
-#SBATCH --time=06:00:00
+#SBATCH --time=01:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4

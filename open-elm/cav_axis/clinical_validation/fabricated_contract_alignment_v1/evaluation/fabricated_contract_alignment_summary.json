@@ -1,0 +1,82 @@
+{
+  "scope": "fabricated_only",
+  "n_cases": 6,
+  "schema_valid_rate": 1.0,
+  "stable_rate": 1.0,
+  "exact_status_accuracy": 0.8333333333333334,
+  "release_pass": false,
+  "cases": [
+    {
+      "case_id": "active_present",
+      "repeat_count": 3,
+      "schema_valid": true,
+      "stable": true,
+      "exact_status_match": true,
+      "routes": [
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "case_id": "active_missing",
+      "repeat_count": 3,
+      "schema_valid": true,
+      "stable": true,
+      "exact_status_match": true,
+      "routes": [
+        true,
+        true,
+        true
+      ]
+    },
+    {
+      "case_id": "active_unsupported",
+      "repeat_count": 3,
+      "schema_valid": true,
+      "stable": true,
+      "exact_status_match": false,
+      "routes": [
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "case_id": "historical_context",
+      "repeat_count": 3,
+      "schema_valid": true,
+      "stable": true,
+      "exact_status_match": true,
+      "routes": [
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "case_id": "unknown_component",
+      "repeat_count": 3,
+      "schema_valid": true,
+      "stable": true,
+      "exact_status_match": true,
+      "routes": [
+        true,
+        true,
+        true
+      ]
+    },
+    {
+      "case_id": "conditional_hold",
+      "repeat_count": 3,
+      "schema_valid": true,
+      "stable": true,
+      "exact_status_match": true,
+      "routes": [
+        false,
+        false,
+        false
+      ]
+    }
+  ]
+}

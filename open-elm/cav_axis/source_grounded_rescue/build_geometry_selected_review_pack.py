@@ -16,6 +16,14 @@ from build_source_grounded_review_pack import REVIEW_FIELDS
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--generation_ledger_path", required=True)
+    parser.add_argument(
+        "--contract_path",
+        default=None,
+        help=(
+            "Optional reviewed transition contract JSONL. For hybrid notes, its "
+            "status-labeled facts replace the prompt-safe ledger as the review reference."
+        ),
+    )
     parser.add_argument("--selected_manifest_path", required=True)
     parser.add_argument("--output_dir", required=True)
     parser.add_argument("--seed", type=int, default=20260716)
@@ -35,6 +43,12 @@ def main() -> None:
     ledger_by_case = {str(row["case_id"]): row for row in ledgers}
     if len(ledger_by_case) != len(ledgers):
         raise ValueError("Generation ledger contains duplicate case_id values.")
+    contract_by_case: dict[str, dict[str, object]] = {}
+    if args.contract_path:
+        contracts = read_jsonl(Path(args.contract_path).resolve())
+        contract_by_case = {str(row["case_id"]): row for row in contracts}
+        if len(contract_by_case) != len(contracts):
+            raise ValueError("Reviewed contract contains duplicate case_id values.")
     selected = pd.read_json(Path(args.selected_manifest_path).resolve(), lines=True)
     required = {"rescue_id", "case_id", "anchor_id", "generated_text", "output_in_target_basin"}
     if missing := required - set(selected.columns):
@@ -47,6 +61,8 @@ def main() -> None:
     ledger_cases = set(ledger_by_case)
     if not selected_cases.issubset(ledger_cases):
         raise ValueError("Selected manifest includes cases absent from the frozen generation ledger.")
+    if contract_by_case and not selected_cases.issubset(set(contract_by_case)):
+        raise ValueError("Selected manifest includes cases absent from the reviewed contract.")
     if not args.allow_selected_subset and selected_cases != ledger_cases:
         raise ValueError("Selected manifest cases do not exactly match the frozen generation ledger.")
 
@@ -54,6 +70,7 @@ def main() -> None:
     for row in selected.sort_values("case_id").to_dict(orient="records"):
         case_id = str(row["case_id"])
         ledger = ledger_by_case[case_id]
+        review_facts = contract_by_case[case_id]["facts"] if contract_by_case else ledger["facts"]
         blinded_id = f"geometry_selected_blind_{len(review_rows) + 1:03d}"
         review_rows.append(
             {
@@ -63,7 +80,7 @@ def main() -> None:
                 "patient_disjoint_from_train": ledger.get("patient_disjoint_from_train"),
                 "document_type": args.document_type,
                 "optional_fields": args.optional_fields,
-                "verified_fact_ledger": json.dumps(ledger["facts"], ensure_ascii=True, indent=2),
+                "verified_fact_ledger": json.dumps(review_facts, ensure_ascii=True, indent=2),
                 "synthetic_note": row["generated_text"],
                 **{field: "" for field in REVIEW_FIELDS},
             }
@@ -101,6 +118,7 @@ def main() -> None:
         "document_type": args.document_type,
         "optional_fields": [value.strip() for value in args.optional_fields.split(",") if value.strip()],
         "frozen_ledger_cases": int(len(ledger_cases)),
+        "review_reference": "reviewed_contract" if contract_by_case else "generation_ledger",
         "selected_case_count": int(len(selected_cases)),
         "unselected_case_count": int(len(ledger_cases.difference(selected_cases))),
         "security_note": "Review CSV contains compact verified facts and synthetic notes only; keep the condition/geometry key blinded until labels are final.",

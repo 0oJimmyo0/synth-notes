@@ -84,11 +84,26 @@ def validate(record: dict[str, object], schema: dict[str, object] | None = None)
             errors.append("reject_without_material_finding")
     alignment_schema = properties.get("ledger_to_note_alignment", {}).get("items", {})
     if isinstance(payload.get("ledger_to_note_alignment"), list) and alignment_schema:
+        alignment_required = set(alignment_schema.get("required", []))
+        alignment_properties = alignment_schema.get("properties", {})
         allowed_statuses = set(alignment_schema.get("properties", {}).get("status", {}).get("enum", []))
         for item in payload["ledger_to_note_alignment"]:
-            if not isinstance(item, dict) or (allowed_statuses and item.get("status") not in allowed_statuses):
+            if not isinstance(item, dict):
                 errors.append("invalid_alignment_status")
                 break
+            if alignment_required - set(item):
+                errors.append("alignment_missing_required")
+                break
+            if alignment_schema.get("additionalProperties") is False and set(item) - set(alignment_properties):
+                errors.append("alignment_unexpected_keys")
+                break
+            if allowed_statuses and item.get("status") not in allowed_statuses:
+                errors.append("invalid_alignment_status")
+                break
+            for field in ("contract_id", "note_evidence", "rationale"):
+                if field in alignment_properties and not isinstance(item.get(field), str):
+                    errors.append("alignment_text_field_invalid")
+                    break
     return errors
 
 

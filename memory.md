@@ -1,5 +1,84 @@
 # Project Memory
 
+## Current Stage: Contract-First Hybrid Validation And LLM Redesign
+
+The active method is no longer inference-time embedding steering or free-form
+clinical-note generation. The primary pipeline is source-grounded hybrid
+generation: clinician-reviewed fact contracts deterministically render the
+high-risk transition fields (diagnosis, active discharge medications,
+disposition, and instructions), while ELM generates constrained hospital-course
+prose. Generated notes are BGE re-embedded and selected using the frozen
+real-manifold geometry. Blinded human review remains the clinical endpoint.
+
+Key frozen findings:
+
+- input-space steering and decoder adaptation failed to preserve sparse-region
+  identity through the ELM decode -> BGE re-embed cycle;
+- the cluster-36 hybrid development pilot improved from 6/9 to 8/9 strict
+  passes after contract and hospital-course constraints; a targeted `ledger_003`
+  regression passed after transition-sentence stripping;
+- the fresh cluster-25 contract-resolved cross-region pilot produced 10/12
+  strict full-note passes (83.3%), with one unsupported medication addition and
+  one critical omission. This is feasibility evidence, not a deployment claim;
+- MedGemma-27B was provisioned and run locally/offline only. It detected the
+  single medication error in the 12-note cluster-25 review but falsely rejected
+  eight human-clean notes. In routed-finding adjudication, 0/35 finding bundles
+  were supported as stated. Fabricated prompt variants v3.3 and v3.4 also failed
+  their release criteria (83.3% schema-valid and an unsafe unknown-dose reject).
+
+MedGemma decision:
+
+- do not use MedGemma as an automatic accept/reject gate, an editor, or a
+  clinical-safety claim;
+- retain it as a documented exploratory local-model result;
+- next redesign: a contract-aware evidence-alignment assistant that classifies
+  fixed contract obligations with citations, while deterministic code derives
+  routing. Unknown contract components always route to human review and can
+  never trigger automatic rejection.
+- fabricated contract-alignment v2 passed its six predeclared cases with 100%
+  schema validity, repeat stability, and exact obligation-label accuracy. The
+  next permitted MedGemma run is a locked 12-note clinical calibration against
+  already frozen human labels; it is not independent validation.
+- the locked 12-note run uses a newer reviewed contract that promotes some
+  active medication obligations absent from the older compact-ledger review
+  sheet. The completed blinded contract-matched review contains 92 obligation
+  labels (91 `present_supported`, 1 `unsupported`). Only 63 obligations had
+  complete schema-valid three-repeat key coverage; agreement on those was
+  62/63 (98.4%), but MedGemma missed the sole human `unsupported` negative
+  discharge constraint ("Resume preadmission medications"). Thus its observed
+  non-present sensitivity is 0/1, not a safety result. The 29 uncovered
+  obligations are model-execution failures, not negatives.
+- retain MedGemma as an optional citation-oriented review aid only. Add a
+  deterministic human-review route for generic active-discharge catch-all
+  claims (for example, "resume preadmission/home medications") whenever a
+  contract prohibits medication claims outside enumerated obligations. Do not
+  change models or launch another clinical calibration until this rule has
+  passed expanded fabricated adversarial tests.
+- the deterministic contract audit now implements this route. On the locked
+  12-note calibration it routed the exact missed `ledger_018` phrase, "resume
+  preadmission medications", and left 11/12 notes contract-passing. This is a
+  coverage safeguard, not evidence that the wider clinical-quality problem is
+  solved.
+- fabricated regression `generic_medication_resumption_route_regression.json`
+  passed all five cases: it routes generic preadmission/home/prior medication
+  resumption claims in active discharge sections and does not route a specific
+  regimen or historical inpatient wording.
+
+Immediate manuscript-oriented objective:
+
+1. Freeze the hybrid v3 generator and the MedGemma v3.2-v3.4 negative results.
+2. Build a fresh anchor-disjoint cluster-25 scale cohort using the existing
+   169-row Tier-1 reserve, with clinician-reviewed contracts before generation.
+3. Evaluate geometry landing, contract coverage, patient-disjoint behavior, and
+   blinded full-note review on that frozen cohort.
+4. Develop and validate the redesigned LLM alignment assistant only on a
+   fabricated contract benchmark before any new clinical evaluation.
+
+Manuscript boundary: claim a human-audited feasibility framework for
+source-grounded, geometry-selected sparse-region enrichment. Do not claim
+clinical deployment, privacy safety, autonomous medication reconciliation, or
+cohort-wide enrichment until independent validation supports those claims.
+
 ## Current Stage: Closed-Loop Output-Space Enrichment Validation
 
 Input-space CAV/local transport and decoder-adaptation pilots are frozen as negative/partial findings: pre-decode geometry could improve, but the ELM decode--BGE re-embed map did not preserve sparse-basin identity reliably enough for input-space steering to be the Phase 2 mechanism.
@@ -2150,3 +2229,38 @@ New package boundary:
 - Twelve routes were unsupported overcalls and one remained uncertain because the generated medication section was duplicated and truncated. Main error modes were treating inpatient antimicrobials as discharge medications, inferring active status from conditional instructions, and overlooking complete dose/action evidence in the output.
 - The derived text-free development reference has 60 notes, four material medication discrepancies, 18 adjudicated routes, and one uncertain route. V2 is therefore valid as a conservative human-review router but not as an autonomous final-rejection model.
 - Added compact V3 schema/prompt with a two-tier output: `final_reject` is reserved for supported material discrepancies, while `requires_human_review` retains escalation for uncertainty or possible discrepancies. V3 explicitly distinguishes active discharge medications from inpatient, historical, conditional, and action-only evidence. Next action is V3 development-only calibration with the existing label-free cluster-25 task set and a 1536-token cap, then comparison against the adjudicated four-positive reference. Cluster 11 remains locked.
+
+## July 26 Phase 3a pivot: critical-fact contract and hybrid note assembly
+
+- The active bottleneck is now identified as a generator interface/control failure, not another embedding-steering problem. A verified JSON ledger supplied in a normal prompt remains soft context: free-form ELM generation can compress, omit, or alter low-salience transition facts, and can mix historical inpatient therapy with active discharge treatment. Required headings and final BGE target-basin landing do not prove within-section fact coverage.
+- This is supported by the source-grounded multi-region evidence. Cluster 25 showed 19/20 blinded clinical passes, but cluster 11 showed 12/15 with two unsupported medication additions and one critical medication omission. In cluster 36, the first prospective pilot passed 8/10, while the anchor-disjoint cohort passed 5/7 and included a severe vancomycin dialysis-regimen omission plus an unsupported medication-replacement relation. Geometry remained strong in the anchor-disjoint cohort (41/48 candidate and 6/7 selected target-basin outputs) but was not a clinical-quality guarantee.
+- MedGemma v3.2 is frozen as an exploratory local review assistant, not a prospective router, hard gate, or editing trigger. It was technically stable with complete repeated outputs, but on the cluster-36 anchor-disjoint seven-note evaluation it missed one of two severe human failures and falsely rejected one human-passing note. It must not be further tuned on that evaluation cohort. The small first prospective 10-note result is feasibility evidence only and cannot override the anchor-disjoint false negative.
+- Phase 3a is renamed **Critical-fact contract and hybrid note assembly feasibility**. Build `transition_note_contract_v1` from manually verified ledgers. Each fact has a stable ID, expected section, status (`required`, `optional`, `historical_context_only`, or `explicit_none`), and compact generation value. Required active discharge medications additionally require name, action, dose, route, frequency/timing, duration, and appearance in the discharge-medication section. Historical treatment cannot satisfy an active discharge-medication fact.
+- First implementation is CPU-only backtesting, not another generation run: build a deterministic section/medication contract audit and apply it to the existing reviewed free-form candidate sets. Report fact-level coverage, missing components, unsupported additions, contradictions, severe-error sensitivity, false rejection, and review-referral burden. The audit must detect all known severe medication omissions, including the vancomycin regimen; otherwise improve deterministic normalization/rules before the hybrid pilot. This does not mean the audit alone establishes clinical correctness.
+- The next generation method is hybrid. Deterministically render principal diagnosis, active discharge medications, disposition, supported instructions, and supported follow-up. Permit ELM to generate only a constrained hospital-course narrative from verified course facts. Assemble the final note deterministically, audit the complete contract, then BGE re-embed and apply privacy and geometry gates. Candidate selection order is: contract validity -> structural/privacy validity -> final-output geometry ranking. If no candidate is contract-valid, accept none for that anchor.
+- The first hybrid evaluation should use 8--12 new source-complete, anchor-disjoint cases, four hospital-course candidates per case, and a frozen current free-form fact-only comparator. Review final assembled notes blind. A scale-up claim remains blocked until hybrid notes show no unsupported active discharge medications or severe critical omissions in blinded review, maintain target-region yield against a matched baseline, and reproduce acceptable quality/yield in more than one independent cohort. Manual review at scale is stratified quality control after gate validation, not review of every cohort note.
+
+## July 26 critical-fact contract review and first anchor-disjoint backtest
+
+- Biomedical contract review completed for the 20-case cluster-36 ledger: 154 original rows were reviewed and expanded to 175 completed rows with no pending decisions. The review retained 113 `include`, 3 `optional`, and 59 `historical_context_only` rows, and added 21 required discharge-medication obligations across 14 cases. These additions correctly promote post-discharge antibiotics, treatment durations, anticoagulation bridging/deferment, and explicit medication discontinuations that were only present in hospital-course evidence. Unknown components remain explicitly `not specified`; unsupported medication identities are not promoted.
+- The first deterministic backtest against the seven frozen anchor-disjoint notes is intentionally a calibration failure, not a release gate. It routed the known vancomycin dialysis-regimen omission (`ledger_010`), but missed the severe unsupported diazepam-to-phenol replacement relationship (`ledger_013`). Measured severe-error sensitivity was 1/2, any-medication-error sensitivity 2/3, and one human-passing note was routed (25% false-rejection rate among four human medication-error-negative notes). Hybrid generation and scale-up remain blocked.
+- The next narrowly scoped implementation task is to extend the contract/audit representation for explicit medication action and negative relationship obligations (for example, no unsupported replacement/discontinuation relationship between independently active medications), while consuming reviewer-provided structured medication components and treating `not specified` as non-required. Re-run the same frozen seven-note backtest and require detection of both known severe failures before any new note generation.
+
+## July 26 contract backtest calibration gate: necessary criterion met
+
+- A versioned contract addition encoded the independently adjudicated `ledger_013` prohibition on an unsupported diazepam-to-phenol replacement relationship. The repeated frozen seven-note anchor-disjoint backtest now routes both known severe failures and all three known medication-error cases: severe-error sensitivity 2/2 and any-medication-error sensitivity 3/3. This clears the necessary retrospective sensitivity criterion for beginning hybrid-renderer implementation.
+- The route rate is 4/7, including one route among four human medication-error-negative notes (25% false-rejection rate under the existing human medication label). This is not silently optimized away: before the hybrid acceptance rule is frozen, adjudicate whether that route represents a deliberately stricter required-component rule (for example, a duration/action required by the contract but documented outside the medication section) or a parser/normalization artifact. The tiny retrospective set remains a calibration set, not validation of an automatic clinical gate.
+- Next work is CPU-only hybrid implementation: deterministic rendering of high-risk contract sections and ELM generation only for hospital-course prose. No new free-form full-note generation, MedGemma tuning, or cohort scaling is justified at this point.
+
+## August 1 hybrid contract regression: unsupported postoperative-day claim resolved
+
+- In the 25-case Region-25 hybrid cohort, the original blinded review passed 23/25 notes. A contract-reference correction then established that the apparent `ledger_023` medication omission was not a hybrid-contract failure: acetaminophen and ibuprofen were `historical_context_only`, while trimethoprim-sulfamethoxazole was the sole required active discharge medication. The contract-aware corrective adjudication passed.
+- The remaining genuine failure was `ledger_002`, whose free-form hospital course invented "post-operative day 0." `run_hybrid_contract_generation.py` now rejects a numbered postoperative-day statement unless that same day number is present in the reviewed course facts.
+- A fresh four-candidate, one-case regression generated four contract-valid, EOS-terminated candidates without a numbered postoperative-day claim. Final BGE selection yielded 1/1 target-cluster-25 output; blinded contract-aware review passed it with zero unsupported major claims, zero critical omissions, and 5/5 clinical consistency and factual faithfulness.
+- This resolves one observed course-hallucination mode and freezes the hybrid constraint version for the next independent cohort. It is a one-case regression test, not evidence for cohort-wide quality, automatic release, or further MedGemma use.
+
+## August 2 hybrid course-assertion regression: three additional hallucination forms resolved
+
+- In the independent 28-case cluster-44 hybrid cohort, all required deterministic transition fields were retained, but blinded contract-aware review passed 25/28 notes. The three failures were unsupported hospital-course additions only: unverified negative evaluations, an unsupported ``treated for'' relation, and an unsupported uncomplicated-procedure outcome. There were no critical omissions.
+- The three failed outputs were all outside cluster 44; all 13 target-basin outputs passed. This supports a quality-gated target subset but does not establish geometry as a clinical-quality cause, and the selected target yield was only 13/28.
+- `run_hybrid_contract_generation.py` now rejects the three assertion forms unless their exact assertion phrase is supported in reviewed course facts. A three-case, four-candidate-per-case regression selected non-target outputs and passed blinded review in all three cases (zero unsupported major claims and zero critical omissions). This is a post hoc factual-course regression result only. The guard is frozen for a fresh, previously unused cross-region prospective cohort; cluster-44 is not scaled further.

@@ -1,0 +1,7 @@
+{
+  "task_count": 6,
+  "repeats_requested": 3,
+  "expected_output_rows": 18,
+  "output_path": "/gpfs/radev/pi/xu_hua/shared/synthnote/physionet.org/files/embedding_elm/open-elm/cav_axis/clinical_validation/fabricated_contract_alignment_v1/outputs.jsonl",
+  "completed": true
+}
