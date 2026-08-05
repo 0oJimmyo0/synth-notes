@@ -1,0 +1,47 @@
+{
+  "representation_id": "canonical_transition_bge_v1",
+  "embedding_model_name": "BAAI/bge-large-en-v1.5",
+  "primary_population": "source_complete_discharge_transition_notes",
+  "required_sections": [
+    "principal_diagnosis",
+    "hospital_course_events",
+    "discharge_medications",
+    "disposition",
+    "instructions"
+  ],
+  "optional_sections": [
+    "follow_up"
+  ],
+  "display_order": [
+    "principal_diagnosis",
+    "hospital_course_events",
+    "discharge_medications",
+    "disposition",
+    "instructions",
+    "follow_up"
+  ],
+  "heading_aliases": {
+    "principal_diagnosis": ["discharge diagnosis", "discharge diagnoses", "principal diagnosis"],
+    "hospital_course_events": ["brief hospital course", "hospital course"],
+    "discharge_medications": ["discharge medications", "medications on discharge", "discharge medication"],
+    "disposition": ["discharge disposition", "disposition"],
+    "instructions": ["discharge instructions", "instructions"],
+    "follow_up": ["followup instructions", "follow up instructions", "follow-up instructions", "follow up"]
+  },
+  "duplicate_heading_resolution": "first_nonempty_match_in_frozen_alias_order",
+  "missing_required_section_policy": "exclude_from_primary_population; never infer or reconstruct",
+  "explicit_none_policy": "retain only when directly present under a recognized source heading",
+  "chunking": {
+    "content_tokens": 448,
+    "overlap_tokens": 64,
+    "within_section_pooling": "token_count_weighted_mean"
+  },
+  "section_pooling": "equal_weight_mean_over_five_required_sections",
+  "final_normalization": "l2",
+  "geometry_fit": "real_train_only_with_dev_for_hyperparameter_and_stability_selection; optional_prespecified_train_dev_refit_after_freeze",
+  "test_use": "assignment_and_evaluation_only",
+  "sensitivity_representations": [
+    "legacy_prefix_bge_v1",
+    "chunked_full_note_bge_v1"
+  ]
+}

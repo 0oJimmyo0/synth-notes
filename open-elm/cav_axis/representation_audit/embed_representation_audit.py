@@ -92,16 +92,19 @@ def embed_chunked(texts: list[str], tokenizer, model, args: argparse.Namespace) 
 
 
 def split_sections(text: str) -> dict[str, str]:
-    matches = list(HEADING_PATTERN.finditer(text))
     result = {field: "" for field in SECTION_ALIASES}
-    for index, match in enumerate(matches):
+    recognized = []
+    for match in HEADING_PATTERN.finditer(text):
         heading = match.group(1).strip().lower()
-        end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
-        content = text[match.end() : end].strip()
         for field, aliases in SECTION_ALIASES.items():
             if heading in aliases:
-                result[field] = content
+                recognized.append((match, field))
                 break
+    # Restrict delimiters to actual section labels so colons in clinical prose
+    # cannot truncate a canonical field.
+    for index, (match, field) in enumerate(recognized):
+        end = recognized[index + 1][0].start() if index + 1 < len(recognized) else len(text)
+        result[field] = text[match.end() : end].strip()
     return result
 
 
@@ -182,6 +185,8 @@ def main() -> None:
     tokenizer = AutoTokenizer.from_pretrained(args.embedding_model_name, local_files_only=True)
     if tokenizer.model_max_length < args.chunk_tokens + 2:
         raise ValueError("chunk_tokens leaves no room for model special tokens.")
+    # The tokenizer plans manual chunks; SentenceTransformer only receives chunks.
+    tokenizer.model_max_length = 10**9
     model = SentenceTransformer(args.embedding_model_name, device=args.device)
     real_raw = source.source_real_note.fillna("").astype(str).tolist()
     real_canonical = canonical.generated_text.fillna("").astype(str).tolist()

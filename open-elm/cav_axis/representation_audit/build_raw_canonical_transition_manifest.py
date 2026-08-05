@@ -8,27 +8,12 @@ text. It never infers missing fields or uses reviewed contracts/synthetic notes.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
-import sys
 from pathlib import Path
 
 import pandas as pd
 
-
-SOURCE_GROUNDED_RESCUE = Path(__file__).resolve().parents[1] / "source_grounded_rescue"
-if str(SOURCE_GROUNDED_RESCUE) not in sys.path:
-    sys.path.insert(0, str(SOURCE_GROUNDED_RESCUE))
-from build_source_fact_ledger import FIELD_ALIASES, extract_sections, find_section  # noqa: E402
-
-
-REQUIRED_FIELDS = (
-    "principal_diagnosis",
-    "hospital_course_events",
-    "discharge_medications",
-    "disposition",
-    "instructions",
-)
-OPTIONAL_FIELDS = ("follow_up",)
 DISPLAY_LABELS = {
     "principal_diagnosis": "Discharge Diagnosis",
     "hospital_course_events": "Brief Hospital Course",
@@ -42,12 +27,19 @@ DISPLAY_LABELS = {
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source_reference_csv", required=True)
+    parser.add_argument("--spec_path", required=True)
     parser.add_argument("--output_dir", required=True)
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
+    spec_path = Path(args.spec_path).resolve()
+    spec = json.loads(spec_path.read_text())
+    required = list(spec["required_sections"])
+    optional = list(spec.get("optional_sections", []))
+    aliases = {field: list(values) for field, values in spec["heading_aliases"].items()}
+    spec_sha256 = hashlib.sha256(spec_path.read_bytes()).hexdigest()
     source = pd.read_csv(Path(args.source_reference_csv).resolve())
     if {"case_id", "source_real_note"}.difference(source.columns):
         raise KeyError("source reference must include case_id and source_real_note")
@@ -55,21 +47,27 @@ def main() -> None:
     records, audit_rows = [], []
     for row in source.itertuples(index=False):
         case_id = str(row.case_id)
-        sections = extract_sections(str(row.source_real_note))
+        # Import locally so this lightweight source-reference path shares the
+        # exact frozen heading and one-field-per-heading logic with split runs.
+        from build_canonical_transition_split import extract_ordered_sections, first_match
+
+        sections = extract_ordered_sections(str(row.source_real_note))
         values, headings, missing = {}, {}, []
-        for field in REQUIRED_FIELDS + OPTIONAL_FIELDS:
-            found = find_section(sections, FIELD_ALIASES[field])
+        used_headings: set[str] = set()
+        for field in required + optional:
+            found = first_match(sections, aliases[field], used_headings)
             if found is None:
-                if field in REQUIRED_FIELDS:
+                if field in required:
                     missing.append(field)
                 continue
-            heading, value, _, _ = found
+            heading, value, _ = found
             values[field] = value
             headings[field] = heading
+            used_headings.add(heading)
         ready = not missing
         if ready:
             parts = []
-            for field in REQUIRED_FIELDS + OPTIONAL_FIELDS:
+            for field in spec["display_order"]:
                 if field in values:
                     parts.append(f"{DISPLAY_LABELS[field]}:\n{values[field]}")
             records.append({
@@ -78,13 +76,14 @@ def main() -> None:
                 "canonical_ready": True,
                 "source_heading_by_field": headings,
                 "missing_required_fields": [],
-                "canonicalization_version": "raw_heading_extraction_v1",
+                "representation_id": spec["representation_id"],
+                "representation_spec_sha256": spec_sha256,
             })
         audit_rows.append({
             "case_id": case_id,
             "canonical_ready": ready,
             "missing_required_fields": "|".join(missing),
-            **{f"{field}_heading_found": field in headings for field in REQUIRED_FIELDS + OPTIONAL_FIELDS},
+            **{f"{field}_heading_found": field in headings for field in required + optional},
         })
     output_dir = Path(args.output_dir).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -97,9 +96,10 @@ def main() -> None:
         "n_source_notes": len(source),
         "n_canonical_ready": int(audit.canonical_ready.sum()),
         "n_canonical_ready_rate": float(audit.canonical_ready.mean()),
-        "required_fields": list(REQUIRED_FIELDS),
-        "optional_fields": list(OPTIONAL_FIELDS),
-        "canonicalization_version": "raw_heading_extraction_v1",
+        "required_fields": required,
+        "optional_fields": optional,
+        "representation_id": spec["representation_id"],
+        "representation_spec_sha256": spec_sha256,
         "security_note": "Manifest contains source-derived text and must remain on approved project storage.",
     }
     (output_dir / "raw_canonical_transition_summary.json").write_text(json.dumps(summary, indent=2) + "\n")
