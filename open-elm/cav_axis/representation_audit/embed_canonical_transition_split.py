@@ -128,7 +128,10 @@ def flush_batch(batch, embeddings, processed, tokenizer, model, args, spec, spec
     embeddings[processed : processed + len(batch)] = vectors
     for source_index, row in batch:
         metadata.write(json.dumps({
-            key: row[key] for key in ("dataset_row_id", "note_id", "case_id", "source_split") if key in row
+            key: row[key] for key in (
+                "rescue_id", "candidate_index", "dataset_row_id", "note_id", "case_id",
+                "source_split", "review_stratum", "patient_disjoint_from_train",
+            ) if key in row
         } | {
             "source_index": source_index,
             "representation_id": spec["representation_id"],

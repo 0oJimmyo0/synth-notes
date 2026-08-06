@@ -27,6 +27,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--selected_manifest_path", required=True)
     parser.add_argument("--output_dir", required=True)
     parser.add_argument("--seed", type=int, default=20260716)
+    parser.add_argument("--condition", default="checkpoint_8215_fact_only_geometry_selected")
     parser.add_argument("--document_type", default="complete_discharge_summary")
     parser.add_argument("--optional_fields", default="")
     parser.add_argument("--allow_selected_subset", action="store_true", help="Permit output filtering to leave some frozen anchors unselected.")
@@ -50,13 +51,21 @@ def main() -> None:
         if len(contract_by_case) != len(contracts):
             raise ValueError("Reviewed contract contains duplicate case_id values.")
     selected = pd.read_json(Path(args.selected_manifest_path).resolve(), lines=True)
-    required = {"rescue_id", "case_id", "anchor_id", "generated_text", "output_in_target_basin"}
+    required = {"rescue_id", "case_id", "anchor_id", "generated_text"}
     if missing := required - set(selected.columns):
         raise ValueError(f"Selected manifest missing columns: {sorted(missing)}")
     if selected["rescue_id"].duplicated().any() or selected["case_id"].duplicated().any():
         raise ValueError("Selected manifest must contain one unique output per case.")
     if selected["generated_text"].isna().any() or selected["generated_text"].astype(str).str.strip().eq("").any():
         raise ValueError("Selected manifest contains empty generated text.")
+    # Canonical local-support selection intentionally makes no target-basin
+    # claim. Preserve a compatible blank geometry field for legacy key readers.
+    if "output_in_target_basin" not in selected:
+        selected["output_in_target_basin"] = False
+    if "output_cluster_id" not in selected:
+        selected["output_cluster_id"] = None
+    if "target_basin_margin" not in selected:
+        selected["target_basin_margin"] = None
     selected_cases = set(selected["case_id"].astype(str))
     ledger_cases = set(ledger_by_case)
     if not selected_cases.issubset(ledger_cases):
@@ -90,7 +99,7 @@ def main() -> None:
                 "blinded_output_id": blinded_id,
                 "case_id": case_id,
                 "anchor_id": row["anchor_id"],
-                "condition": "checkpoint_8215_fact_only_geometry_selected",
+                "condition": args.condition,
                 "model_condition": "checkpoint_8215",
                 "arm": "fact_only_geometry_selected",
                 "rescue_id": row["rescue_id"],

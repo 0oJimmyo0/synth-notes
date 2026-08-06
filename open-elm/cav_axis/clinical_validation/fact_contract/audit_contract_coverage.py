@@ -94,7 +94,10 @@ def main() -> None:
                 "candidate_id": candidate_id,
                 "required_section": fact["section"], "coverage_status": coverage,
                 "missing_components": missing_components,
-                "hard_reject": fact["field"] in hard_fields and (coverage in {"missing", "wrong_section", "action_contradiction"} or (bool(missing_components) and not exact)),
+                # Contracts render facts by section. Promoted obligations can
+                # have a distinct source field (e.g. discharge_obligation)
+                # while still being mandatory Instructions content.
+                "hard_reject": fact["section"] in hard_fields and (coverage in {"missing", "wrong_section", "action_contradiction"} or (bool(missing_components) and not exact)),
             })
         active_discharge_text = "\n".join(
             sections.get(name, "")

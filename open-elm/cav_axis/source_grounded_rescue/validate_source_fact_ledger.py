@@ -18,6 +18,18 @@ REQUIRED_FIELDS = {
 VALID_STATUSES = {"pending", "verified", "corrected", "omitted", "rejected"}
 
 
+def parse_bool(value: object) -> bool:
+    """Accept spreadsheet-style boolean values without treating blank cells as true."""
+    if pd.isna(value):
+        return False
+    normalized = str(value).strip().lower()
+    if normalized in {"", "false", "0", "no", "n"}:
+        return False
+    if normalized in {"true", "1", "yes", "y"}:
+        return True
+    raise ValueError(f"Cannot interpret case_blocked value: {value!r}")
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Validate a manually reviewed source-fact ledger CSV.")
     parser.add_argument("--ledger_review_csv", required=True)
@@ -57,6 +69,7 @@ def main() -> None:
         verified_fields = set(verified.field.astype(str))
         reviewer_case_status = ""
         reviewer_blocking_reasons = ""
+        reviewer_case_blocked = False
         if "case_validation_status" in group.columns:
             statuses = {
                 str(value).strip().lower()
@@ -66,10 +79,22 @@ def main() -> None:
             if len(statuses) > 1:
                 raise ValueError(f"case_id={case_id} has inconsistent case_validation_status values: {sorted(statuses)}")
             reviewer_case_status = next(iter(statuses), "")
-        if "case_blocking_reasons" in group.columns:
-            reasons = [str(value).strip() for value in group.case_blocking_reasons.fillna("") if str(value).strip()]
+        blocking_reason_column = next(
+            (column for column in ("case_blocking_reasons", "case_blocked_reason") if column in group.columns),
+            None,
+        )
+        if blocking_reason_column:
+            reasons = [str(value).strip() for value in group[blocking_reason_column].fillna("") if str(value).strip()]
             reviewer_blocking_reasons = " | ".join(dict.fromkeys(reasons))
-        reviewer_blocks = bool(reviewer_case_status) and reviewer_case_status != "validated_for_generation"
+        if "case_blocked" in group.columns:
+            values = {parse_bool(value) for value in group.case_blocked}
+            if len(values) != 1:
+                raise ValueError(f"case_id={case_id} has inconsistent case_blocked values: {sorted(values)}")
+            reviewer_case_blocked = values.pop()
+        reviewer_blocks = (
+            reviewer_case_blocked
+            or (bool(reviewer_case_status) and reviewer_case_status != "validated_for_generation")
+        )
         missing_fields = active_required_fields.difference(verified_fields)
         per_case.append({
             "case_id": case_id,
@@ -79,6 +104,7 @@ def main() -> None:
             "missing_required_fields": "|".join(sorted(missing_fields)),
             "reviewer_case_validation_status": reviewer_case_status,
             "reviewer_case_blocking_reasons": reviewer_blocking_reasons,
+            "reviewer_explicit_case_blocked": reviewer_case_blocked,
             "reviewer_case_blocked": reviewer_blocks,
             # Explicit clinician case-level blocks cover unsafe obligations that
             # cannot be represented by mere section-level presence checks.

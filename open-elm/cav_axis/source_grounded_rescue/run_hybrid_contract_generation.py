@@ -14,7 +14,7 @@ from transformers import AutoTokenizer
 from run_source_grounded_rescue import generate, load_model
 
 
-RENDERED_FIELDS = (
+RENDERED_SECTIONS = (
     ("principal_diagnosis", "Discharge Diagnosis"),
     ("discharge_medications", "Discharge Medications"),
     ("disposition", "Disposition"),
@@ -27,7 +27,10 @@ RENDERED_FIELDS = (
 COURSE_CONSTRAINT_PATTERNS = {
     "gendered_pronoun": re.compile(r"(?i)\b(?:he|she|him|her|his|hers)\b"),
     "disposition_or_transfer": re.compile(
-        r"(?i)\b(?:discharg(?:e|ed|ing)|transfer(?:red|ring)?|facility|rehabilitation|rehab|placement|home)\b"
+        # Do not flag clinical procedure language such as "stent placement".
+        r"(?i)\b(?:discharg(?:e|ed|ing)|transfer(?:red|ring)?|facility|rehabilitation|rehab|"
+        r"(?:skilled\s+nursing|nursing\s+home|home\s+health)\s+(?:facility|placement)|"
+        r"placement\s+(?:in|at|to)\s+(?:a\s+)?(?:facility|rehab|nursing\s+home))\b"
     ),
 }
 TERMINAL_OUTCOME_PATTERN = re.compile(r"(?i)\b(?:resolved|resolution|healed|cured|cleared)\b")
@@ -38,7 +41,12 @@ UNSUPPORTED_COURSE_ASSERTION_PATTERNS = {
     "unsupported_negative_evaluation": re.compile(r"(?i)\b(?:did not|was not)\s+(?:assess(?:ed)?|evaluate(?:d)?)\b"),
     "unsupported_treatment_relationship": re.compile(r"(?i)\btreated\s+for\b"),
     "unsupported_procedure_outcome": re.compile(r"(?i)\b(?:tolerated|uncomplicated|without complications?)\b"),
+    "unsupported_evidence_absence_claim": re.compile(
+        r"(?i)\b(?:information|record|evidence|history)\s+(?:does not|did not)\s+"
+        r"(?:establish|specify|document|indicate)\b"
+    ),
 }
+COURSE_FORMAT_ARTIFACT_PATTERN = re.compile(r"(?im)^\s*(?:note|disclaimer)\s*:")
 TRANSITION_SENTENCE_PATTERN = re.compile(
     r"(?i)\b(?:discharg(?:e|ed|ing)|transfer(?:red|ring)?|facility|rehabilitation|rehab|placement|home)\b"
 )
@@ -105,6 +113,8 @@ def build_course_prompt(facts: list[dict[str, str]]) -> str:
 
 def course_constraint_reasons(course: str, facts: list[dict[str, str]]) -> list[str]:
     reasons = [name for name, pattern in COURSE_CONSTRAINT_PATTERNS.items() if pattern.search(course)]
+    if COURSE_FORMAT_ARTIFACT_PATTERN.search(course):
+        reasons.append("course_format_artifact")
     source_text = " ".join(fact["value"] for fact in facts).lower()
     if any(token.group(0).lower() not in source_text for token in TERMINAL_OUTCOME_PATTERN.finditer(course)):
         reasons.append("unsupported_terminal_outcome")
@@ -127,11 +137,14 @@ def course_constraint_reasons(course: str, facts: list[dict[str, str]]) -> list[
 def render_note(contract: dict, course: str) -> str:
     sections = []
     facts = contract["facts"]
-    for field, heading in RENDERED_FIELDS:
+    for section_name, heading in RENDERED_SECTIONS:
         values = [
             str(fact["generation_value"]).strip()
             for fact in facts
-            if str(fact["field"]) == field and str(fact["status"]) in {"required", "optional"}
+            # The reviewed contract controls the rendered section.  This
+            # includes promoted discharge obligations whose source field is
+            # not literally named "instructions" (for example lab monitoring).
+            if str(fact["section"]) == section_name and str(fact["status"]) in {"required", "optional"}
             and str(fact["generation_value"]).strip()
         ]
         if values:

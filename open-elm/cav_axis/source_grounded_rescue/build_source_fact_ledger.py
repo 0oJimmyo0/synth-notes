@@ -24,7 +24,12 @@ from closed_loop_train_text_privacy_screen import infer_pickle_dir, load_note_te
 
 FIELD_ALIASES = {
     "admission_reason": ("chief complaint", "reason for admission", "history of present illness"),
-    "principal_diagnosis": ("discharge diagnosis", "discharge diagnoses", "principal diagnosis"),
+    # Keep the source ledger aligned with the frozen canonical-transition v2
+    # eligibility spec; otherwise valid Primary Diagnosis sections become false blocks.
+    "principal_diagnosis": (
+        "discharge diagnosis", "discharge diagnoses", "principal diagnosis",
+        "primary diagnosis", "primary diagnoses",
+    ),
     "secondary_diagnoses": ("secondary diagnosis", "secondary diagnoses", "diagnoses"),
     "procedures_this_admission": ("major surgical or invasive procedure", "procedures", "procedure"),
     "complications": ("complications",),

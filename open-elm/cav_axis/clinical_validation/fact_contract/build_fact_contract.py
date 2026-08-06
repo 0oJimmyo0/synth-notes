@@ -17,6 +17,17 @@ REQUIRED_FIELDS = {
 }
 
 
+def as_bool(value: object) -> bool:
+    if pd.isna(value):
+        return False
+    normalized = str(value).strip().lower()
+    if normalized in {"", "false", "0", "no", "n"}:
+        return False
+    if normalized in {"true", "1", "yes", "y"}:
+        return True
+    raise ValueError(f"Cannot interpret case_excluded value: {value!r}")
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     source = parser.add_mutually_exclusive_group(required=True)
@@ -53,6 +64,16 @@ def main() -> None:
         usable = frame.loc[frame.status.isin({"verified", "corrected"})].copy()
         usable["generation_value"] = usable.generation_value.fillna("").astype(str).str.strip()
         usable["section"] = usable.field.astype(str)
+    excluded_case_ids: set[str] = set()
+    if is_reviewed_contract and "case_excluded" in frame.columns:
+        case_excluded = frame.groupby("case_id", dropna=False).case_excluded.agg(
+            lambda values: {as_bool(value) for value in values}
+        )
+        inconsistent = case_excluded.loc[case_excluded.map(len).ne(1)]
+        if not inconsistent.empty:
+            raise ValueError(f"case_excluded is inconsistent within cases: {inconsistent.index.tolist()[:10]}")
+        excluded_case_ids = set(case_excluded.loc[case_excluded.map(lambda values: True in values)].index.astype(str))
+        usable = usable.loc[~usable.case_id.astype(str).isin(excluded_case_ids)].copy()
     usable = usable.loc[usable.generation_value != ""]
     output_dir = Path(args.output_dir).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -101,6 +122,7 @@ def main() -> None:
     summary = {
         "n_contracts": len(contracts),
         "n_ready_for_hybrid_generation": sum(item["ready_for_hybrid_generation"] for item in contracts),
+        "n_cases_excluded_by_review": len(excluded_case_ids),
         "contract_version": "transition_note_contract_v1",
     }
     (output_dir / "transition_note_contract_summary.json").write_text(json.dumps(summary, indent=2) + "\n")
