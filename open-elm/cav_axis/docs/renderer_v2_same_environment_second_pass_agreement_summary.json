@@ -1,0 +1,9 @@
+{
+  "n_cases": 27,
+  "pass_fail_agreement": 1.0,
+  "unsupported_claim_agreement": 1.0,
+  "critical_omission_agreement": 1.0,
+  "mean_absolute_consistency_score_difference": 0.037037037037037035,
+  "mean_absolute_faithfulness_score_difference": 0.1111111111111111,
+  "interpretation": "Same-environment de novo reproducibility only; not independent human inter-rater reliability."
+}

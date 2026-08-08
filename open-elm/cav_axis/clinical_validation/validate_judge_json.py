@@ -104,6 +104,13 @@ def validate(record: dict[str, object], schema: dict[str, object] | None = None)
                 if field in alignment_properties and not isinstance(item.get(field), str):
                     errors.append("alignment_text_field_invalid")
                     break
+        # A non-present contract obligation must route to review even when the
+        # model's top-level boolean is internally inconsistent.
+        if any(
+            isinstance(item, dict) and item.get("status") in {"missing", "unsupported", "uncertain"}
+            for item in payload["ledger_to_note_alignment"]
+        ) and payload.get("requires_human_review") is not True:
+            errors.append("nonpresent_alignment_without_human_review")
     return errors
 
 

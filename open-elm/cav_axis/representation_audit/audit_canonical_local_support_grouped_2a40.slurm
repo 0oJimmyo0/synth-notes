@@ -19,6 +19,11 @@ SCRIPT_DIR="/gpfs/radev/pi/xu_hua/shared/synthnote/physionet.org/files/embedding
 : "${REFERENCE_SPLIT_PATH:?Set REFERENCE_SPLIT_PATH.}"
 : "${OUTPUT_DIR:?Set OUTPUT_DIR.}"
 : "${SPLIT_SEED:?Set SPLIT_SEED.}"
+QUERY_SPLIT=${QUERY_SPLIT:-dev}
+if [[ "$QUERY_SPLIT" != "dev" && "$QUERY_SPLIT" != "test" ]]; then
+  echo "ERROR: QUERY_SPLIT must be dev or test." >&2
+  exit 1
+fi
 
 module load miniconda
 CONDA_BASE=$(conda info --base)
@@ -33,6 +38,7 @@ srun --ntasks=2 --ntasks-per-node=2 --gres=gpu:1 bash -lc '
     --dev_subject_metadata_path "'"${DEV_SUBJECT_METADATA_PATH}"'" \
     --reference_split_path "'"${REFERENCE_SPLIT_PATH}"'" \
     --output_dir "'"${OUTPUT_DIR}"'" --split_seed "'"${SPLIT_SEED}"'" \
+    --query_split "'"${QUERY_SPLIT}"'" \
     --k_grid "'"${K_GRID:-10,25,50,100}"'" \
     --query_batch_size "'"${QUERY_BATCH_SIZE:-128}"'" \
     --reference_batch_size "'"${REFERENCE_BATCH_SIZE:-8192}"'" \
@@ -46,4 +52,5 @@ python "${SCRIPT_DIR}/representation_audit/audit_canonical_local_support_grouped
   --dev_subject_metadata_path "${DEV_SUBJECT_METADATA_PATH}" \
   --reference_split_path "${REFERENCE_SPLIT_PATH}" \
   --output_dir "${OUTPUT_DIR}" --split_seed "${SPLIT_SEED}" \
+  --query_split "${QUERY_SPLIT}" \
   --k_grid "${K_GRID:-10,25,50,100}" --shard_count 2 --merge_only

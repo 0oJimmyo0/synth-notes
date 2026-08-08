@@ -33,6 +33,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--task_path", required=True)
     parser.add_argument("--model_path", required=True, help="Approved local instruction model path; never an external API ID.")
     parser.add_argument("--output_path", required=True)
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help=(
+            "Retain schema-valid task/repeat records already in --output_path and "
+            "regenerate only missing or invalid records."
+        ),
+    )
     parser.add_argument("--schema_path", default=str(SCHEMA_PATH), help="Versioned local output schema.")
     parser.add_argument("--prompt_path", default=str(PROMPT_PATH), help="Versioned local prompt template with {schema}, {ledger}, and {note} placeholders.")
     parser.add_argument("--max_new_tokens", type=int, default=2048)
@@ -163,6 +171,23 @@ def main() -> None:
         raise ValueError(f"Prompt template is missing placeholders: {missing_placeholders}")
     evidence_fields = parse_evidence_fields(args.medication_evidence_fields)
     tasks = [json.loads(line) for line in task_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    expected_keys = {
+        (str(task["task_id"]), repeat_index)
+        for task in tasks
+        for repeat_index in range(args.repeats)
+    }
+    retained_records: dict[tuple[str, int], dict[str, object]] = {}
+    if args.resume and output_path.exists():
+        for line in output_path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            try:
+                record = json.loads(line)
+                key = (str(record.get("task_id", "")), int(record.get("repeat_index", -1)))
+            except (json.JSONDecodeError, TypeError, ValueError):
+                continue
+            if key in expected_keys and bool(record.get("schema_valid")):
+                retained_records[key] = record
     tokenizer = AutoTokenizer.from_pretrained(str(model_path), local_files_only=True)
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token = tokenizer.eos_token
@@ -184,10 +209,15 @@ def main() -> None:
         "repeats_requested": args.repeats,
         "expected_output_rows": len(tasks) * args.repeats,
         "output_path": str(output_path),
+        "resume": args.resume,
+        "retained_schema_valid_rows": len(retained_records),
         "completed": False,
     }
     run_manifest_path.write_text(json.dumps(run_manifest, indent=2), encoding="utf-8")
     with output_path.open("w", encoding="utf-8") as handle:
+        for key in sorted(retained_records, key=lambda item: (item[1], item[0])):
+            handle.write(json.dumps(retained_records[key], ensure_ascii=True) + "\n")
+        handle.flush()
         for repeat_index in range(args.repeats):
             seed = args.seed + repeat_index
             random.seed(seed)
@@ -196,7 +226,12 @@ def main() -> None:
             if torch.cuda.is_available():
                 torch.cuda.manual_seed_all(seed)
             for offset in range(0, len(tasks), args.batch_size):
-                task_batch = tasks[offset : offset + args.batch_size]
+                task_batch = [
+                    task for task in tasks[offset : offset + args.batch_size]
+                    if (str(task["task_id"]), repeat_index) not in retained_records
+                ]
+                if not task_batch:
+                    continue
                 rendered = [
                     render_prompt(
                         tokenizer,

@@ -18,7 +18,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--canonical_metadata_path", required=True)
     parser.add_argument("--split_manifest_path", required=True)
-    parser.add_argument("--source_split", choices=("train", "dev"), required=True)
+    parser.add_argument("--source_split", choices=("train", "dev", "test"), required=True)
     parser.add_argument("--output_path", required=True)
     return parser.parse_args()
 

@@ -46,7 +46,11 @@ UNSUPPORTED_COURSE_ASSERTION_PATTERNS = {
         r"(?:establish|specify|document|indicate)\b"
     ),
 }
-COURSE_FORMAT_ARTIFACT_PATTERN = re.compile(r"(?im)^\s*(?:note|disclaimer)\s*:")
+COURSE_FORMAT_ARTIFACT_PATTERN = re.compile(
+    r"(?im)(?:^\s*\.\s*$|\(?\s*(?:note|disclaimer)\s*:|"
+    r"\[\s*(?:insert|replace|placeholder|tbd|to be completed)\b[^\]]*\]|"
+    r"\bmanaged accordingly\b)"
+)
 TRANSITION_SENTENCE_PATTERN = re.compile(
     r"(?i)\b(?:discharg(?:e|ed|ing)|transfer(?:red|ring)?|facility|rehabilitation|rehab|placement|home)\b"
 )
@@ -115,6 +119,16 @@ def course_constraint_reasons(course: str, facts: list[dict[str, str]]) -> list[
     reasons = [name for name, pattern in COURSE_CONSTRAINT_PATTERNS.items() if pattern.search(course)]
     if COURSE_FORMAT_ARTIFACT_PATTERN.search(course):
         reasons.append("course_format_artifact")
+    sentences = [
+        re.sub(
+            r"(?i)^\s*(?:brief\s+)?hospital\s+course\s*:\s*", "",
+            re.sub(r"\s+", " ", sentence).strip(),
+        ).lower()
+        for sentence in re.split(r"(?<=[.!?])\s+", course)
+        if sentence.strip()
+    ]
+    if len(sentences) != len(set(sentences)):
+        reasons.append("repeated_course_sentence")
     source_text = " ".join(fact["value"] for fact in facts).lower()
     if any(token.group(0).lower() not in source_text for token in TERMINAL_OUTCOME_PATTERN.finditer(course)):
         reasons.append("unsupported_terminal_outcome")

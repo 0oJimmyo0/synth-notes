@@ -24,6 +24,7 @@ SCRIPT=$OPEN_ELM_DIR/cav_axis/representation_audit/score_generated_canonical_loc
 : "${OUTPUT_ROOT:?Set OUTPUT_ROOT}"
 SEEDS=${SEEDS:-20260811,20260812,20260813,20260814,20260815}
 K=${K:-50}
+ANALYSIS_SCOPE=${ANALYSIS_SCOPE:-generated_candidates_against_frozen_real_train_references_only}
 
 module load miniconda
 CONDA_BASE=$(conda info --base)
@@ -42,6 +43,7 @@ for seed in "${seed_array[@]}"; do
     --reference_split_path "$REFERENCE_SPLIT_DIR/train_reference_split_seed_${seed}.csv" \
     --split_seed "$seed" \
     --k "$K" \
+    --analysis_scope "$ANALYSIS_SCOPE" \
     --output_dir "$OUTPUT_ROOT/seed_${seed}" \
     --device cuda
 done

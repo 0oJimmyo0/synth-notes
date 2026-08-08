@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Repeated subject-grouped local-support audit for canonical embeddings.
 
-This script evaluates real canonical dev notes only.  Each frozen train
+This script evaluates real canonical query notes only. Each frozen train
 reference split is subject-disjoint between its A/B halves and contains one
 representative for each exact embedding-vector class.  For every dev query,
 train neighbors from the same subject are excluded before top-k support is
@@ -33,6 +33,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dev_embeddings_path", required=True)
     parser.add_argument("--dev_subject_metadata_path", required=True)
     parser.add_argument("--reference_split_path", required=True)
+    parser.add_argument("--query_split", choices=("dev", "test"), default="dev")
     parser.add_argument("--output_dir", required=True)
     parser.add_argument("--split_seed", required=True, type=int)
     parser.add_argument("--k_grid", default="10,25,50,100")
@@ -105,9 +106,9 @@ def rank_spearman(left: np.ndarray, right: np.ndarray) -> float:
     return float(np.corrcoef(pd.Series(left).rank().to_numpy(), pd.Series(right).rank().to_numpy())[0, 1])
 
 
-def diagnostics(a: np.ndarray, b: np.ndarray, patient_disjoint: np.ndarray, ks: list[int]) -> list[dict]:
+def diagnostics(a: np.ndarray, b: np.ndarray, patient_disjoint: np.ndarray, ks: list[int], query_split: str) -> list[dict]:
     rows = []
-    for subset_name, subset in (("all_dev", np.ones(len(a), dtype=bool)), ("patient_disjoint_dev", patient_disjoint)):
+    for subset_name, subset in ((f"all_{query_split}", np.ones(len(a), dtype=bool)), (f"patient_disjoint_{query_split}", patient_disjoint)):
         if int(subset.sum()) < 10:
             continue
         for column, k in enumerate(ks):
@@ -147,7 +148,7 @@ def merge(args: argparse.Namespace, ks: list[int]) -> None:
         excluded_b[query_indices] = part["same_subject_reference_count_b"]
     patient_disjoint = dev_metadata.get("patient_disjoint_from_train", pd.Series(False, index=dev_metadata.index))
     patient_disjoint = patient_disjoint.astype(bool).to_numpy()
-    record_path = output_dir / "canonical_dev_local_support.jsonl"
+    record_path = output_dir / f"canonical_{args.query_split}_local_support.jsonl"
     with record_path.open("w") as handle:
         for index, row in dev_metadata.iterrows():
             record = {key: row[key] for key in ("source_index", "dataset_row_id", "note_id", "case_id", "subject_id", "patient_disjoint_from_train") if key in row}
@@ -160,11 +161,11 @@ def merge(args: argparse.Namespace, ks: list[int]) -> None:
     summary = {
         "split_seed": args.split_seed,
         "fit_population": "real_canonical_train_only_subject_grouped_exact_vector_deduplicated_references",
-        "evaluation_population": "real_canonical_dev_only_with_same_subject_neighbors_excluded",
-        "n_dev": int(len(dev)),
-        "n_patient_disjoint_dev": int(patient_disjoint.sum()),
+        "evaluation_population": f"real_canonical_{args.query_split}_only_with_same_subject_neighbors_excluded",
+        f"n_{args.query_split}": int(len(dev)),
+        f"n_patient_disjoint_{args.query_split}": int(patient_disjoint.sum()),
         "k_grid": ks,
-        "diagnostics": diagnostics(support_a, support_b, patient_disjoint, ks),
+        "diagnostics": diagnostics(support_a, support_b, patient_disjoint, ks, args.query_split),
         "same_subject_reference_exclusions": {
             "reference_a_total": int(excluded_a.sum()),
             "reference_b_total": int(excluded_b.sum()),

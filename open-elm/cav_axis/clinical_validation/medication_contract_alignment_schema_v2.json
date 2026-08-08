@@ -1,0 +1,24 @@
+{
+  "title": "Contract-bound medication evidence alignment v2",
+  "type": "object",
+  "required": ["ledger_to_note_alignment", "requires_human_review"],
+  "properties": {
+    "ledger_to_note_alignment": {
+      "type": "array",
+      "maxItems": 48,
+      "items": {
+        "type": "object",
+        "required": ["contract_id", "status", "note_evidence", "rationale"],
+        "properties": {
+          "contract_id": {"type": "string"},
+          "status": {"type": "string", "enum": ["present_supported", "missing", "unsupported", "uncertain"]},
+          "note_evidence": {"type": "string"},
+          "rationale": {"type": "string"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "requires_human_review": {"type": "boolean"}
+  },
+  "additionalProperties": false
+}

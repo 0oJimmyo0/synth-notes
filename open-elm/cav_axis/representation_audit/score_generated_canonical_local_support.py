@@ -28,6 +28,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--split_seed", required=True, type=int)
     parser.add_argument("--k", required=True, type=int)
     parser.add_argument("--output_dir", required=True)
+    parser.add_argument(
+        "--analysis_scope",
+        default="generated_candidates_against_frozen_real_train_references_only",
+        help="Provenance label for the scored candidate set (for example heldout_test).",
+    )
     parser.add_argument("--query_batch_size", type=int, default=128)
     parser.add_argument("--reference_batch_size", type=int, default=8192)
     parser.add_argument("--device", default="cpu")
@@ -112,21 +117,26 @@ def main() -> None:
     if candidate_meta.rescue_id.duplicated().any():
         raise ValueError("Candidate metadata contains duplicate rescue IDs.")
     subject_manifest = pd.read_csv(Path(args.candidate_subject_manifest_path).resolve())
-    needed_subject = {"final_case_id", "dataset_row_id", "subject_id", "support_arm", "cohort_stratum", "patient_disjoint_from_train"}
+    # Development manifests retain ``final_case_id`` after source review,
+    # whereas frozen held-out screening manifests use their immutable ``case_id``.
+    # Both are valid contract/generation identifiers.
+    case_id_column = "final_case_id" if "final_case_id" in subject_manifest.columns else "case_id"
+    needed_subject = {case_id_column, "dataset_row_id", "subject_id", "support_arm", "cohort_stratum", "patient_disjoint_from_train"}
     if missing := needed_subject.difference(subject_manifest.columns):
         raise KeyError(f"Candidate subject manifest missing columns: {sorted(missing)}")
-    # The frozen cohort retains its original source-ledger ``case_id`` as well
-    # as ``final_case_id``.  Use only the final ID, which is the contract and
-    # generation identifier, before renaming to avoid duplicate merge labels.
+    # Normalize either frozen cohort identifier to the contract/generation key.
     subject_manifest = subject_manifest[[
-        "final_case_id", "dataset_row_id", "subject_id", "support_arm",
+        case_id_column, "dataset_row_id", "subject_id", "support_arm",
         "cohort_stratum", "patient_disjoint_from_train",
-    ]].rename(columns={"final_case_id": "case_id"})
+    ]].rename(columns={case_id_column: "case_id"})
     if subject_manifest.case_id.duplicated().any() or subject_manifest.dataset_row_id.duplicated().any():
         raise ValueError("Candidate subject manifest must contain one row per case and dataset row.")
+    # Source-ledger case IDs are reassigned to ``ledger_*`` during review,
+    # while the frozen held-out cohort retains its original split case ID.
+    # ``dataset_row_id`` is the immutable cross-stage provenance key.
     candidates_meta = candidate_meta.merge(
-        subject_manifest[["case_id", "dataset_row_id", "subject_id", "support_arm", "cohort_stratum", "patient_disjoint_from_train"]],
-        on=["case_id", "dataset_row_id"], how="left", validate="many_to_one", suffixes=("", "_frozen"),
+        subject_manifest[["dataset_row_id", "subject_id", "support_arm", "cohort_stratum", "patient_disjoint_from_train"]],
+        on="dataset_row_id", how="left", validate="many_to_one", suffixes=("", "_frozen"),
     )
     if candidates_meta.subject_id.isna().any():
         raise ValueError("Some candidate rows could not be linked to frozen subject provenance.")
@@ -152,7 +162,7 @@ def main() -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     output.to_csv(output_dir / "generated_canonical_local_support.csv", index=False)
     summary = {
-        "scope": "development_generated_candidates_against_frozen_real_train_references_only",
+        "scope": args.analysis_scope,
         "split_seed": args.split_seed,
         "n_candidates": int(len(output)),
         "n_cases": int(output.case_id.nunique()),

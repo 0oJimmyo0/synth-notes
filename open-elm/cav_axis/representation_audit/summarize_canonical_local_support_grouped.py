@@ -14,6 +14,7 @@ import pandas as pd
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run_root", required=True)
+    parser.add_argument("--query_split", choices=("dev", "test"), default="dev")
     parser.add_argument("--seeds", default="20260811,20260812,20260813,20260814,20260815")
     parser.add_argument("--output_dir", required=True)
     parser.add_argument("--rank_spearman_median_min", type=float, default=0.90)
@@ -33,13 +34,13 @@ def main() -> None:
         summary = json.loads((run_dir / "canonical_local_support_stability_summary.json").read_text())
         if summary["split_seed"] != seed:
             raise ValueError(f"Seed mismatch in {run_dir}.")
-        records = pd.read_json(run_dir / "canonical_dev_local_support.jsonl", lines=True)
+        records = pd.read_json(run_dir / f"canonical_{args.query_split}_local_support.jsonl", lines=True)
         records["split_seed"] = seed
         runs.append(records)
         diagnostics.extend([{**row, "split_seed": seed} for row in summary["diagnostics"]])
     diagnostic_frame = pd.DataFrame(diagnostics)
-    all_dev = diagnostic_frame.loc[diagnostic_frame.population.eq("all_dev")].copy()
-    aggregate = all_dev.groupby("k", as_index=False).agg(
+    all_query = diagnostic_frame.loc[diagnostic_frame.population.eq(f"all_{args.query_split}")].copy()
+    aggregate = all_query.groupby("k", as_index=False).agg(
         n_seeds=("split_seed", "nunique"),
         median_rank_spearman=("rank_spearman_a_vs_b", "median"),
         minimum_rank_spearman=("rank_spearman_a_vs_b", "min"),
@@ -79,9 +80,9 @@ def main() -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     diagnostic_frame.to_csv(output_dir / "per_seed_local_support_diagnostics.csv", index=False)
     aggregate.to_csv(output_dir / "local_support_stability_by_k.csv", index=False)
-    frequency.to_csv(output_dir / "dev_sparse_anchor_frequency.csv", index=False)
+    frequency.to_csv(output_dir / f"{args.query_split}_sparse_anchor_frequency.csv", index=False)
     summary = {
-        "scope": "real_train_reference_and_real_dev_only",
+        "scope": f"real_train_reference_and_real_{args.query_split}_only",
         "seeds": seeds,
         "decision_thresholds": {
             "median_rank_spearman_min": args.rank_spearman_median_min,

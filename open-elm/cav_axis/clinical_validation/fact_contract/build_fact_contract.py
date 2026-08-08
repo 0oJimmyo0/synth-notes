@@ -15,6 +15,7 @@ from normalize_medications import medication_components, reviewer_components
 REQUIRED_FIELDS = {
     "principal_diagnosis", "hospital_course_events", "discharge_medications", "disposition", "instructions",
 }
+RENDERED_SECTIONS = REQUIRED_FIELDS | {"follow_up"}
 
 
 def as_bool(value: object) -> bool:
@@ -75,6 +76,17 @@ def main() -> None:
         excluded_case_ids = set(case_excluded.loc[case_excluded.map(lambda values: True in values)].index.astype(str))
         usable = usable.loc[~usable.case_id.astype(str).isin(excluded_case_ids)].copy()
     usable = usable.loc[usable.generation_value != ""]
+    if is_reviewed_contract:
+        unmapped = usable.loc[
+            usable.status.isin({"required", "optional"}) & ~usable.section.isin(RENDERED_SECTIONS),
+            ["case_id", "fact_id", "field", "section"],
+        ]
+        if not unmapped.empty:
+            examples = unmapped.head(10).to_dict(orient="records")
+            raise ValueError(
+                "Required or optional facts must use a rendered canonical section "
+                f"({sorted(RENDERED_SECTIONS)}); unmapped examples: {examples}"
+            )
     output_dir = Path(args.output_dir).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
     contracts = []

@@ -46,7 +46,12 @@ TOP_P=${TOP_P:-0.95}
 BATCH_SIZE=${BATCH_SIZE:-1}
 MAX_GENERATION_SECONDS=${MAX_GENERATION_SECONDS:-0}
 PROGRESS_EVERY=${PROGRESS_EVERY:-10}
+RESUME=${RESUME:-0}
 MEDICATION_EVIDENCE_FIELDS=${MEDICATION_EVIDENCE_FIELDS:-discharge_medications,instructions}
+# Contract-alignment tasks already supply a restricted, status-labeled
+# obligation ledger.  Do not apply the medication-judge field filter to those
+# tasks, or promoted obligations such as monitoring would be silently removed.
+MEDICATION_ONLY_EVIDENCE=${MEDICATION_ONLY_EVIDENCE:-1}
 
 nvidia-smi
 # The runner uses device_map=auto, which shards MedGemma-27B BF16 across the
@@ -65,7 +70,7 @@ if (( GPU_COUNT < 2 )) || (( GPU_MEMORY_MIBS[0] < 44000 )) || (( GPU_MEMORY_MIBS
   echo "ERROR: MedGemma-27B BF16 requires two 44 GB-or-larger GPUs; detected ${GPU_COUNT} GPUs totaling ${GPU_TOTAL_MIB} MiB." >&2
   exit 1
 fi
-python "$REPO_ROOT/open-elm/cav_axis/clinical_validation/run_local_medication_judge.py" \
+cmd=(python "$REPO_ROOT/open-elm/cav_axis/clinical_validation/run_local_medication_judge.py" \
   --task_path "$TASK_PATH" \
   --model_path "$MODEL_PATH" \
   --output_path "$OUTPUT_PATH" \
@@ -81,6 +86,18 @@ python "$REPO_ROOT/open-elm/cav_axis/clinical_validation/run_local_medication_ju
   --top_p "$TOP_P" \
   --batch_size "$BATCH_SIZE" \
   --max_generation_seconds "$MAX_GENERATION_SECONDS" \
-  --progress_every "$PROGRESS_EVERY" \
-  --medication_evidence_fields "$MEDICATION_EVIDENCE_FIELDS" \
-  --medication_only_evidence
+  --progress_every "$PROGRESS_EVERY")
+
+if [[ "$MEDICATION_ONLY_EVIDENCE" == "1" ]]; then
+  cmd+=(--medication_evidence_fields "$MEDICATION_EVIDENCE_FIELDS" --medication_only_evidence)
+elif [[ "$MEDICATION_ONLY_EVIDENCE" != "0" ]]; then
+  echo "ERROR: MEDICATION_ONLY_EVIDENCE must be 0 or 1." >&2
+  exit 1
+fi
+if [[ "$RESUME" == "1" ]]; then
+  cmd+=(--resume)
+elif [[ "$RESUME" != "0" ]]; then
+  echo "ERROR: RESUME must be 0 or 1." >&2
+  exit 1
+fi
+"${cmd[@]}"

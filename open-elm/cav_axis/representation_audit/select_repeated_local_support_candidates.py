@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Select one generated candidate per case using frozen repeated local support.
 
-Selection is development-only and does not use clinical labels, MedGemma output,
-or target-region membership.  It retains every source-complete case and ranks
-its candidates by worst-case support across frozen reference splits.
+Selection does not use clinical labels, MedGemma output, or target-region
+membership. It ranks each eligible candidate set by worst-case support across
+frozen reference splits and explicitly records cases with no eligible candidate.
 """
 
 from __future__ import annotations
@@ -22,6 +22,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--posthoc_constraint_audit_path", default=None)
     parser.add_argument("--course_constraint_audit_path", default=None)
     parser.add_argument("--expected_candidates_per_case", type=int, default=4)
+    parser.add_argument(
+        "--analysis_scope",
+        default="generated_candidate_selection",
+        help="Provenance label for this selection run (for example heldout_test).",
+    )
     parser.add_argument("--output_dir", required=True)
     return parser.parse_args()
 
@@ -38,26 +43,35 @@ def main() -> None:
     if not counts.eq(args.expected_candidates_per_case).all():
         bad = counts.loc[~counts.eq(args.expected_candidates_per_case)].to_dict()
         raise ValueError(f"Cases do not have {args.expected_candidates_per_case} scored candidates: {bad}")
+    all_candidate_case_ids = set(support.case_id.astype(str))
     manifest = pd.read_json(Path(args.generation_manifest_path).resolve(), lines=True)
     if "rescue_id" not in manifest or manifest.rescue_id.duplicated().any():
         raise ValueError("Generation manifest must contain unique rescue_id values.")
     if args.course_constraint_audit_path:
         course_audit = pd.read_json(Path(args.course_constraint_audit_path).resolve(), lines=True)
-        required_audit = {"rescue_id", "course_constraint_pass"}
+        required_audit = {"rescue_id", "course_constraint_pass", "hit_max_new_tokens"}
         if missing := required_audit.difference(course_audit.columns):
             raise KeyError(f"Course constraint audit is missing columns: {sorted(missing)}")
         if course_audit.rescue_id.duplicated().any():
             raise ValueError("Course constraint audit has duplicate rescue IDs.")
         support = support.merge(
-            course_audit[["rescue_id", "course_constraint_pass"]].rename(
-                columns={"course_constraint_pass": "current_course_constraint_pass"}
+            course_audit[["rescue_id", "course_constraint_pass", "hit_max_new_tokens"]].rename(
+                columns={
+                    "course_constraint_pass": "current_course_constraint_pass",
+                    "hit_max_new_tokens": "current_hit_max_new_tokens",
+                }
             ), on="rescue_id", how="left", validate="one_to_one"
         )
-        if support.current_course_constraint_pass.isna().any():
+        if support[["current_course_constraint_pass", "current_hit_max_new_tokens"]].isna().any().any():
             raise ValueError("Some support rows are absent from the course constraint audit.")
-        support = support.loc[support.current_course_constraint_pass.astype(bool)].copy()
-        if support.empty or support.groupby("case_id").rescue_id.size().lt(1).any():
-            raise ValueError("At least one case has no constraint-passing candidate.")
+        support = support.loc[
+            support.current_course_constraint_pass.astype(bool)
+            & ~support.current_hit_max_new_tokens.astype(bool)
+        ].copy()
+        if support.empty:
+            raise ValueError("No eligible non-capped constraint-passing candidates remain.")
+    eligible_case_ids = set(support.case_id.astype(str))
+    unselected_case_ids = sorted(all_candidate_case_ids.difference(eligible_case_ids))
     selected = support.sort_values(
         ["case_id", "min_support", "mean_support", "candidate_index"],
         ascending=[True, False, False, True], kind="stable",
@@ -71,6 +85,8 @@ def main() -> None:
     if "current_course_constraint_pass" in output:
         if not output.current_course_constraint_pass.astype(bool).all():
             raise ValueError("Selected outputs include a current failed course constraint.")
+        if output.current_hit_max_new_tokens.astype(bool).any():
+            raise ValueError("Selected outputs include a max-token cap hit.")
     elif not output.course_constraint_pass.astype(bool).all():
         if not args.posthoc_constraint_audit_path:
             raise ValueError("Selected outputs include a failed course constraint.")
@@ -84,10 +100,16 @@ def main() -> None:
     output.drop(columns=[column for column in ["generated_text", "hospital_course_text"] if column in output]).to_csv(
         output_dir / "selected_candidate_scores.csv", index=False
     )
+    pd.DataFrame({
+        "case_id": unselected_case_ids,
+        "selection_status": "no_eligible_non_capped_constraint_passing_candidate",
+    }).to_csv(output_dir / "unselected_cases.csv", index=False)
     summary = {
-        "scope": "development_only_candidate_selection",
+        "scope": args.analysis_scope,
+        "n_cases_candidate_pool": len(all_candidate_case_ids),
         "n_cases": int(output.case_id.nunique()),
         "n_selected_candidates": int(len(output)),
+        "n_unselected_cases": len(unselected_case_ids),
         "selection_rule": "max_min_support_then_mean_support_then_lowest_candidate_index",
         "target_region_rule_used": False,
         "clinical_or_judge_labels_used": False,
