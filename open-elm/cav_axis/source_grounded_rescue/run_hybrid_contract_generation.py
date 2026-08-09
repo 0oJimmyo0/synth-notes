@@ -90,6 +90,16 @@ def remove_transition_sentences(value: str) -> str:
     return " ".join(sentence for sentence in sentences if not TRANSITION_SENTENCE_PATTERN.search(sentence)).strip()
 
 
+def neutralize_gendered_pronouns(value: str) -> str:
+    """Use the required patient-neutral wording without altering clinical facts."""
+    value = re.sub(r"(?i)\b(?:he|she|him)\b", "the patient", value)
+    value = re.sub(r"(?i)\b(?:his|hers)\b", "the patient's", value)
+    # ``her`` can be possessive or objective. Preserve grammatical possession
+    # before a word, otherwise use the neutral object form.
+    value = re.sub(r"(?i)\bher\b(?=\s+[A-Za-z])", "the patient's", value)
+    return re.sub(r"(?i)\bher\b", "the patient", value)
+
+
 def course_facts(contract: dict) -> list[dict[str, str]]:
     allowed = {"principal_diagnosis", "hospital_course_events", "procedures_this_admission", "complications"}
     facts = []
@@ -148,19 +158,50 @@ def course_constraint_reasons(course: str, facts: list[dict[str, str]]) -> list[
     return reasons
 
 
+def section_values(facts: list[dict], section_name: str) -> list[str]:
+    """Render reviewed facts without separating an unnamed medication fragment.
+
+    Contract splitting can separate a medication name from its regimen within
+    one source-row list. Join only an adjacent unnamed fragment from that same
+    source row when the preceding named medication has no dose; this preserves
+    the reviewed evidence without guessing across medications.
+    """
+    selected = [
+        fact for fact in facts
+        if str(fact["section"]) == section_name
+        and str(fact["status"]) in {"required", "optional"}
+        and str(fact["generation_value"]).strip()
+    ]
+    if section_name != "discharge_medications":
+        return [str(fact["generation_value"]).strip() for fact in selected]
+
+    rendered: list[tuple[str, dict]] = []
+    for fact in selected:
+        value = str(fact["generation_value"]).strip()
+        components = fact.get("medication_components") or {}
+        name = str(components.get("name", "")).strip().lower()
+        unnamed = not name or name.startswith("not specified")
+        fact_base = re.sub(r"__split_\d+$", "", str(fact.get("fact_id", "")))
+        if rendered and unnamed:
+            prior_value, prior_fact = rendered[-1]
+            prior_components = prior_fact.get("medication_components") or {}
+            prior_name = str(prior_components.get("name", "")).strip().lower()
+            prior_dose = str(prior_components.get("dose", "")).strip()
+            prior_base = re.sub(r"__split_\d+$", "", str(prior_fact.get("fact_id", "")))
+            if prior_name and not prior_name.startswith("not specified") and not prior_dose and fact_base == prior_base:
+                rendered[-1] = (f"{prior_value} {value}", prior_fact)
+                continue
+        rendered.append((value, fact))
+    return [value for value, _ in rendered]
+
+
 def render_note(contract: dict, course: str) -> str:
     sections = []
     facts = contract["facts"]
     for section_name, heading in RENDERED_SECTIONS:
-        values = [
-            str(fact["generation_value"]).strip()
-            for fact in facts
-            # The reviewed contract controls the rendered section.  This
-            # includes promoted discharge obligations whose source field is
-            # not literally named "instructions" (for example lab monitoring).
-            if str(fact["section"]) == section_name and str(fact["status"]) in {"required", "optional"}
-            and str(fact["generation_value"]).strip()
-        ]
+        # The reviewed contract controls the rendered section. This includes
+        # promoted discharge obligations such as laboratory monitoring.
+        values = section_values(facts, section_name)
         if values:
             sections.append(f"{heading}:\n" + "\n".join(f"- {value}" for value in values))
     course = re.sub(r"(?is)^\s*brief\s+hospital\s+course\s*:\s*", "", course).strip()
@@ -206,6 +247,7 @@ def main() -> None:
                         args.temperature, args.top_p,
                         args.seed + candidate_index * args.max_course_attempts + attempt - 1,
                     )
+                    course = neutralize_gendered_pronouns(course)
                     reasons = course_constraint_reasons(course, facts)
                     if not reasons:
                         break

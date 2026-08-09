@@ -1,6 +1,97 @@
 # Project Memory
 
-## Current Stage: Contract-First Hybrid Validation And LLM Redesign
+## Current Frozen Primary Result: August 2026
+
+The current primary result is a frozen, source-restricted held-out evaluation
+of contract-first hybrid discharge-transition-note generation. It supersedes
+the historical pilot-stage summaries below as the current project state.
+
+### Locked held-out result
+
+- frozen test screen: 400 patient-unique notes, balanced across stable
+  sparse/dense and patient-disjoint/overlap strata;
+- source-ledger ready: 239/400 (59.8%); manual contract eligible: 208/239;
+  compiled hybrid ready: 205/208;
+- generated: 205 cases, 820 candidates; support- and constraint-selected:
+  193 cases; 12 generated cases had no non-capped, course-constraint-passing
+  candidate;
+- strict blinded source-grounded review: 175/193 passes (90.7%), 10
+  unsupported-major-claim flags, and 0 critical omissions;
+- patient-disjoint: 90/98 passes (91.8%); patient-overlap: 85/95 (89.5%);
+- failures localize to free-form hospital-course prose. Their 18-note primary
+  taxonomy is redaction/unknown reconstruction 8 (44.4%), temporal or
+  medication-state contradiction 3 (16.7%), other narrative hallucination 3
+  (16.7%), unsupported medication history/action 2 (11.1%), unsupported
+  outcome/procedure assertion 1 (5.6%), and template artifact 1 (5.6%).
+
+### Locked interpretation and boundaries
+
+- Report both conditional factual usability (175/193) and end-to-end pipeline
+  yield (175/400 = 43.8%); neither is a full-cohort clinical-safety claim.
+- The result supports deterministic binding of high-risk transition fields,
+  not an autonomous clinical-use, privacy-preserving, public-release, target-
+  basin-enrichment, or downstream-utility claim.
+- The 400-note cohort, selected 193 outputs, review labels, renderer, and
+  selection rule are frozen. Do not tune prompts, alter constraints, replace
+  failures, or rerun this cohort to improve its endpoint.
+- MedGemma remains an optional operational alignment aid only. Its
+  medication-focused scope cannot detect the dominant hospital-course failure
+  modes and it is not an automatic gate or clinical-safety evaluator.
+- The downstream observed-return feasibility audit is a no-go for the planned
+  sparse-versus-dense utility comparison: in the patient-disjoint test cohort,
+  stable sparse had 27/686 observed 30-day returns and 37/686 observed 90-day
+  returns (versus 224/6,105 and 333/6,105 in stable dense). Do not use
+  patient-overlap events to compensate, and do not launch augmentation for
+  this endpoint.
+- Deterministic renderer development evidence now supports it as the
+  provisional source-faithful renderer: 27/27 passes in the initial ablation;
+  17/17 deterministic versus 14/17 hybrid passes in a paired, arm-blinded
+  comparison; and 11/11 passes in an independent development replication.
+  These are development results, not final performance estimates.
+- The original deterministic renderer (v3) then passed 73/80 (91.25%) in a
+  held-out audit with zero unsupported major claims but four critical omissions.
+  Its transition-sentence filter could remove required course facts.
+- Renderer v4 preserves reviewed course facts verbatim. It passed 15/15 in a
+  new development validation after contract routing. However, applying v4 to
+  the older held-out contract passed only 60/80: 19 critical omissions and one
+  medication-state contradiction. This is a frozen negative configuration,
+  not a final v4 estimate, because the contract had not been updated to route
+  active transitions into rendered sections.
+- A targeted audit proved that all 20 v4 held-out failures had identical old
+  and purportedly routed contract payloads. The targeted remediation review
+  classified 10 cases as repairable with 36 atomic required obligations and
+  10 as unsafe exclusions. This is diagnostic development work only; those
+  reviewed cases cannot be reused for confirmation.
+- The source-faithful method is therefore a locked *pair*, not a renderer in
+  isolation: source-reviewed atomic transition contract plus deterministic
+  verbatim-course rendering. No clinical-quality endpoint may be claimed until
+  this pair is evaluated on a new, never-reviewed held-out cohort.
+
+### Results-first next gates
+
+1. Compile and structurally audit the targeted contract remediation, then lock
+   the contract-routing protocol and deterministic v4 renderer together.
+2. Select a new patient-unique held-out cohort whose notes, source review,
+   contracts, and outputs have not been inspected during renderer development.
+   Predeclare the strict-review sample, strata, endpoint, and no-rerun rule.
+3. Obtain blinded clinician/pharmacist concordance on all failures plus a
+   stratified random pass subset. Current same-environment model reviews do
+   not constitute independent clinical validation.
+4. Evaluate whether the locked pair improves or even preserves target-region
+   landing. If it does not, remove sparse-manifold enrichment from the primary
+   claim rather than using clinical fidelity as a substitute for geometry.
+5. Identify a feasible non-circular downstream outcome before any augmentation
+   experiment; observed 30- and 90-day return remain no-go endpoints.
+6. Complete bounded copying/privacy analysis and plan any derivative sharing
+   under the MIMIC/PhysioNet controlled-access agreement.
+
+### Manuscript gate
+
+Do not begin manuscript drafting or seek submission approval yet. Seek mentor
+review only after the bounded validation, development ablation, utility, and
+privacy gates above have been evaluated. Historical milestones follow.
+
+## Historical Stage: Contract-First Hybrid Validation And LLM Redesign
 
 The active method is no longer inference-time embedding steering or free-form
 clinical-note generation. The primary pipeline is source-grounded hybrid
@@ -2215,6 +2306,13 @@ New package boundary:
 - The Phase 3a judge has been redesigned as a compact medication-only contract: only verified `discharge_medications` and `instructions` ledger facts are supplied; output is limited to at most 12 evidence-cited discrepancy findings plus pass/reject fields. The compact V2 schema, prompt, semantic validator, per-repeat flush logging, and deterministic subset builder are in `open-elm/cav_axis/clinical_validation/`.
 - The new default cap is 1536 tokens. Any cap-hit, malformed JSON, schema failure, repeat instability, or internally inconsistent decision is review-only and cannot become an automated pass. This is a bounded clinical-judge output, not a discharge-note generation cap.
 - Required execution order: cancel the obsolete job; verify one-H100 BF16 loading; run the exact compact production path on fabricated tasks; run a four-task cluster-25 restricted timing/format preflight with labels removed; only then decide whether the 60-task, three-repeat development calibration is computationally and methodologically ready. Cluster 11 remains locked throughout calibration.
+
+## August 9 V4 fresh held-out deterministic confirmation frozen
+
+- The fresh V4 held-out screen comprised 80 unique-subject test notes balanced across stable-dense/stable-sparse and patient-disjoint/patient-overlap strata. Source review passed 47 cases, but required-section validation correctly reduced this to 45 because `ledger_007` and `ledger_080` lacked actionable instructions. Contract review excluded 11 further cases for material transition uncertainty, leaving 34 contract-ready cases.
+- The locked pair of a manually reviewed atomic transition contract and the deterministic V4 renderer using `course_fact_mode=verbatim_contract` passed strict blinded review in all 34/34 eligible held-out cases. The reviewer found 307/307 required facts in designated sections, zero unsupported major claims, and zero critical omissions; mean consistency and factual-faithfulness scores were both 4.0/5 because source-preserving `not specified`, terse, and repetitive formatting remains a readability limitation.
+- Freeze directory: `.../heldout_test_v4_routed_confirmation_80_v2/final_v4_deterministic_confirmatory_freeze/`, including summaries, label matrix, contract summary, and code/artifact SHA-256 manifest. This supports source-faithful deterministic rendering among pre-screened contract-eligible cases, not a claim of 34/80 unrestricted success, independent external-clinician validity, target-basin enrichment, privacy safety, public release, or downstream utility.
+- The next research decision is not more free-form generation. First predefine and execute a held-out utility endpoint that remains meaningful in the patient-disjoint subset, together with a privacy/copying evaluation and an independent-review plan. Continue reporting geometry only as a secondary alignment analysis unless a dev-frozen under-coverage/vanilla-deficit rule subsequently demonstrates held-out target-region enrichment.
 
 ## July 22 MedGemma compact V2 cluster-25 development calibration complete
 

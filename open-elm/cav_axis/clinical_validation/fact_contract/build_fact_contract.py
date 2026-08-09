@@ -44,6 +44,11 @@ def main() -> None:
     source_path = args.reviewed_contract_csv or args.ledger_review_csv
     frame = pd.read_csv(Path(source_path).resolve())
     is_reviewed_contract = args.reviewed_contract_csv is not None
+    # V4 review workbooks use an explicit spreadsheet-friendly name for this
+    # case-level flag.  Normalize it here so the original reviewed workbook is
+    # accepted without a manual, provenance-changing column rename.
+    if is_reviewed_contract and "case_excluded" not in frame.columns and "case_excluded_yes_no" in frame.columns:
+        frame["case_excluded"] = frame["case_excluded_yes_no"]
     required_columns = (
         {"case_id", "fact_id", "field", "contract_section", "contract_status", "contract_generation_value", "reviewer_decision"}
         if is_reviewed_contract else {"case_id", "fact_id", "field", "generation_value", "manual_verification_status"}
@@ -53,6 +58,19 @@ def main() -> None:
     optional = {value.strip() for value in args.optional_fields.split(",") if value.strip()}
     if is_reviewed_contract:
         frame["reviewer_decision"] = frame.reviewer_decision.fillna("").astype(str).str.lower().str.strip()
+        # V4 preserves source-ledger row labels (verified/corrected/omitted)
+        # in reviewer_decision and records the final contract route separately
+        # in contract_status.  Convert only this unambiguous convention; mixed
+        # or unknown decision vocabularies still fail below instead of guessing.
+        source_review_decisions = {"verified", "corrected", "omitted"}
+        observed_decisions = set(frame.reviewer_decision).difference({""})
+        if observed_decisions and observed_decisions.issubset(source_review_decisions):
+            contract_routes = {"required", "optional", "include", "historical_context_only"}
+            routes = frame.contract_status.fillna("").astype(str).str.lower().str.strip()
+            retained = frame.reviewer_decision.isin({"verified", "corrected"})
+            if set(routes.loc[retained]).difference(contract_routes):
+                raise ValueError("V4 retained rows have invalid contract_status values")
+            frame.loc[retained, "reviewer_decision"] = routes.loc[retained]
         pending = frame.reviewer_decision.eq("pending")
         if pending.any():
             raise ValueError(f"{int(pending.sum())} contract-review rows are still pending")

@@ -28,6 +28,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output_dir", required=True)
     parser.add_argument("--seed", type=int, default=20260716)
     parser.add_argument("--condition", default="checkpoint_8215_fact_only_geometry_selected")
+    parser.add_argument("--model_condition", default="checkpoint_8215")
+    parser.add_argument("--arm", default="fact_only_geometry_selected")
     parser.add_argument("--document_type", default="complete_discharge_summary")
     parser.add_argument("--optional_fields", default="")
     parser.add_argument("--allow_selected_subset", action="store_true", help="Permit output filtering to leave some frozen anchors unselected.")
@@ -100,8 +102,8 @@ def main() -> None:
                 "case_id": case_id,
                 "anchor_id": row["anchor_id"],
                 "condition": args.condition,
-                "model_condition": "checkpoint_8215",
-                "arm": "fact_only_geometry_selected",
+                "model_condition": args.model_condition,
+                "arm": args.arm,
                 "rescue_id": row["rescue_id"],
                 "candidate_index": row.get("candidate_index"),
                 "seed": row.get("seed"),

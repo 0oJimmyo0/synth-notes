@@ -4,8 +4,8 @@
 #SBATCH --job-name=hybrid_contract_2a40
 #SBATCH --output=/gpfs/radev/pi/xu_hua/shared/synthnote/physionet.org/files/embedding_elm/open-elm/cav_axis/source_grounded_rescue/logs/hybrid_contract_2a40_%j.out
 #SBATCH --error=/gpfs/radev/pi/xu_hua/shared/synthnote/physionet.org/files/embedding_elm/open-elm/cav_axis/source_grounded_rescue/logs/hybrid_contract_2a40_%j.err
-#SBATCH --partition=gpu
-#SBATCH --gres=gpu:a100:2
+#SBATCH --partition=gpu_devel
+#SBATCH --gres=gpu:a40:2
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=32G
 #SBATCH --time=06:00:00

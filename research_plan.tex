@@ -18,6 +18,104 @@ Source-Conditioned Synthetic Discharge-Summary Generation}
 \maketitle
 
 %=============================================================================
+\section*{Current frozen primary result (August 2026)}
+%=============================================================================
+
+\textbf{Status.} The primary held-out note-quality evaluation is complete and
+frozen. This update supersedes the historical steering and pilot-stage roadmap
+below as the current decision document. It is not a manuscript draft and no
+submission decision should be made until the remaining bounded experiments are
+complete and reviewed by the mentor.
+
+\textbf{Frozen cohort flow.}
+\begin{center}
+\begin{tabular}{lr}
+\toprule
+Stage & Cases \\
+\midrule
+Frozen patient-unique test screen & 400 \\
+Source-ledger ready & 239 (59.8\%) \\
+Manual contract eligible & 208 (87.0\% of source-ready) \\
+Compiled hybrid ready and generated & 205 \\
+Support- and constraint-selected outputs & 193 (94.1\% of generated) \\
+Strict factual-usability passes & 175 (90.7\% of selected; 43.8\% of screen) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Frozen clinical endpoint.} Blinded source-grounded review of 193
+selected outputs found 175 strict passes, 10 unsupported-major-claim flags,
+and zero critical omissions. Pass rates were 90/98 (91.8\%) in the
+patient-disjoint stratum and 85/95 (89.5\%) in the patient-overlap stratum.
+Required diagnosis, active discharge-medication, disposition, and instruction
+obligations were retained; residual factual failures localized to free-form
+hospital-course prose.
+
+\textbf{Failure mechanism.} The 18 failed outputs were categorized as
+redaction/unknown reconstruction (8), temporal or medication-state
+contradiction (3), other narrative hallucination (3), unsupported medication
+history/action (2), unsupported outcome/procedure assertion (1), and template
+artifact (1). Thus deterministic contract rendering controls high-risk
+transition omissions, while unconstrained narrative generation remains the
+dominant error surface.
+
+\textbf{Locked claim boundaries.} Report conditional factual usability
+(175/193) separately from end-to-end pipeline yield (175/400). Do not claim
+clinical safety, autonomous clinical use, privacy preservation, unrestricted
+public data release, target-region enrichment, or downstream utility. The
+frozen test cohort, selected outputs, review labels, renderer, and selection
+rule must not be modified, rerun, or used for further optimization.
+
+\textbf{Observed-return utility no-go.} The note-linked hospital-observed
+return feasibility audit found adequate linkage overall but inadequate events
+for the patient-disjoint stable-sparse test stratum: 27/686 at 30 days and
+37/686 at 90 days, compared with 224/6,105 and 333/6,105 in stable dense.
+Patient-overlap events must not be used to compensate for this limitation.
+Thus observed 30- or 90-day return is not the primary sparse-versus-dense
+augmentation endpoint for this study.
+
+\textbf{Renderer decision branch.} Deterministic verified-course rendering
+passed 27/27 in the initial development ablation, 17/17 versus 14/17 for the
+hybrid course in an arm-blinded paired development comparison, and 11/11 in a
+separate development replication. After preserving course facts verbatim and
+routing active transitions into deterministic sections, v4 passed 15/15 in a
+new development validation. These results support deterministic rendering as
+the provisional source-faithful method, but they are not final held-out
+performance estimates.
+
+\textbf{Negative configuration evidence.} On held-out notes, deterministic
+v3 passed 73/80 with zero unsupported major claims but four critical omissions.
+The v4 renderer paired with the older, unrouted contract passed 60/80 with 19
+critical omissions and one medication-state contradiction. A targeted audit
+showed that all 20 failures had identical old and purportedly routed contract
+payloads. Thus the source-faithful method must be evaluated as a locked pair:
+an atomic transition contract plus deterministic verbatim-course rendering.
+Those already reviewed held-out cases are diagnostic only and cannot be reused
+for confirmation.
+
+\textbf{Results-first next gates.}
+\begin{enumerate}[nosep]
+  \item Compile and structurally audit the targeted contract remediation, then
+  lock the contract-routing protocol and deterministic v4 renderer together.
+  \item Select a new patient-unique held-out cohort whose notes and outputs have
+  not been inspected during renderer development. Predeclare its strict-review
+  sample, strata, endpoint, and no-rerun rule.
+  \item Obtain blinded independent clinician/pharmacist concordance on all
+  failures plus a stratified random subset of passes. Same-environment model
+  review is not independent clinical validation.
+  \item Evaluate whether the locked pair preserves target-region landing. If it
+  does not, remove sparse-manifold enrichment from the primary claim rather
+  than substituting clinical fidelity for geometry.
+  \item Identify a feasible non-circular downstream outcome before any
+  augmentation experiment; observed 30- and 90-day return remain no-go
+  endpoints. Complete bounded copying/privacy analysis and plan any release as
+  a controlled MIMIC/PhysioNet-derived resource rather than an open dataset.
+\end{enumerate}
+
+\textbf{Decision rule.} No manuscript drafting or submission request occurs
+until these gates are complete and the mentor reviews the resulting evidence.
+
+%=============================================================================
 \section*{Executive summary}
 %=============================================================================
 
@@ -588,6 +686,8 @@ The next geometry gate is therefore continuous and group-aware.  For five prespe
 Advancement requires project-specific, prespecified operational criteria: median dev rank Spearman at least 0.90, minimum repeated-split Spearman at least 0.85, median sparse-decile Jaccard at least 0.60, stability at two adjacent $k$ values, and anchor sparse frequency at least 80\% across splits at the selected and adjacent $k$.  These are study decision criteria, not universal constants.  A valid continuous under-coverage target must then combine reproducible real local support, unexpectedly weak canonical vanilla support conditional on real support, source eligibility, and clinical interpretability; sparse real support alone is not an enrichment target.  The support/vanilla-deficit rule must be frozen on dev before one held-out test application.  If these gates fail, geometry remains a secondary source--output alignment endpoint and the primary contribution becomes fact-contract-controlled generation rather than a forced cohort-level geometric-enrichment claim.
 
 The confirmatory sequence is: (i) streaming raw-heading extraction and eligibility audit over real train/dev notes; (ii) canonical embeddings plus deterministic-scaffold, hospital-course-only, and leave-one-section-out ablations; (iii) geometry fitting on real train, with dev-only stability and hyperparameter selection; (iv) frozen assignment of real test notes and existing hybrid outputs; and (v), only after those gates, a multi-region test using the frozen contract-first hybrid generator.  The primary endpoint is anchor-level joint success: an eligible held-out anchor has a selected synthetic output that enters a prespecified under-covered canonical region and passes contract, privacy, and blinded clinical-validity gates.  Selection is compared with a random one-of-$K$ candidate from the identical candidate pool.  A manuscript-scale study additionally requires multiple prespecified regions, patient-disjoint reporting, blinded review with agreement assessment, privacy evaluation, and downstream utility on held-out real data; it must not represent MedGemma as an autonomous gate or editor.
+
+\paragraph{V4 renderer confirmation (frozen).} A fresh balanced held-out screen of 80 unique-subject notes was reviewed under the V4 source and contract protocol.  Forty-seven cases passed source review, 45 passed required canonical-section validation (two lacked actionable instructions), and 34 remained after contract-level exclusion of 11 materially incomplete transitions.  The locked deterministic pair---an atomic reviewed transition contract plus the V4 renderer with verbatim reviewed course facts---passed blinded strict review in 34/34 contract-eligible cases, with all 307 required facts present in their designated sections, zero unsupported major claims, and zero critical omissions.  Mean consistency and factual-faithfulness scores were both 4/5 because source-preserving placeholders, terse fragments, and repetition reduce readability without changing the represented action.  This is evidence for source-faithful deterministic rendering among prescreened eligible cases; it is not evidence of unrestricted 34/80 performance, independent external-clinician validation, target-region enrichment, privacy safety, public release suitability, or downstream clinical utility.  No further free-form scaling follows from this result.  The next research gate is a prespecified held-out utility endpoint that is viable in patient-disjoint data, coupled with privacy/copying evaluation and an independent-review plan; geometry remains secondary unless a development-frozen under-coverage/vanilla-deficit rule succeeds on held-out test data.
 
 \subsection{Manuscript figures (target)}
 

@@ -7,7 +7,7 @@ import argparse
 import json
 from pathlib import Path
 
-from run_hybrid_contract_generation import RENDERED_FIELDS, course_facts
+from run_hybrid_contract_generation import RENDERED_SECTIONS, course_facts, section_values
 
 
 def parse_args() -> argparse.Namespace:
@@ -16,6 +16,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--generation_ledger_path", required=True)
     parser.add_argument("--output_dir", required=True)
     parser.add_argument("--output_stem", default="hybrid_geometry_decomposition")
+    parser.add_argument(
+        "--course_fact_mode",
+        choices=("inpatient_only", "verbatim_contract"),
+        default="inpatient_only",
+        help=(
+            "inpatient_only preserves the legacy transition-sentence filter; "
+            "verbatim_contract retains reviewed course facts exactly so required "
+            "post-discharge actions are not silently removed."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -26,23 +36,29 @@ def read_jsonl(path: Path) -> list[dict]:
 def render_transition_sections(contract: dict) -> str:
     """Render only deterministic transition sections, with no course narrative."""
     sections = []
-    for field, heading in RENDERED_FIELDS:
-        values = [
-            str(fact["generation_value"]).strip()
-            for fact in contract["facts"]
-            if str(fact["field"]) == field
-            and str(fact["status"]) in {"required", "optional"}
-            and str(fact["generation_value"]).strip()
-        ]
+    for section_name, heading in RENDERED_SECTIONS:
+        values = section_values(contract["facts"], section_name)
         if values:
             sections.append(f"{heading}:\n" + "\n".join(f"- {value}" for value in values))
     return "\n\n".join(sections).strip()
 
 
-def render_verified_course(contract: dict) -> str:
-    facts = course_facts(contract)
-    values = [str(fact["value"]).strip() for fact in facts if str(fact["value"]).strip()]
-    return "\n".join(["Brief Hospital Course:"] + [f"- {value}" for value in values]).strip()
+def render_verified_course(contract: dict, course_fact_mode: str) -> str:
+    # Diagnosis is already rendered deterministically above. Excluding it and
+    # explicit-none procedure facts avoids repetitive, list-like course prose.
+    allowed = {"hospital_course_events", "procedures_this_admission", "complications"}
+    if course_fact_mode == "inpatient_only":
+        facts = [fact for fact in course_facts(contract) if str(fact["field"]) in allowed]
+        values = [str(fact["value"]).strip() for fact in facts if str(fact["value"]).strip()]
+    else:
+        values = [
+            str(fact["generation_value"]).strip()
+            for fact in contract["facts"]
+            if str(fact["field"]) in allowed
+            and str(fact["status"]) != "explicit_none"
+            and str(fact["generation_value"]).strip()
+        ]
+    return "\n\n".join(["Brief Hospital Course:"] + values).strip()
 
 
 def render_contextual_scaffold(contract: dict) -> str:
@@ -83,7 +99,7 @@ def main() -> None:
         if not contract.get("ready_for_hybrid_generation"):
             continue
         sections = render_transition_sections(contract)
-        verified_course = render_verified_course(contract)
+        verified_course = render_verified_course(contract, args.course_fact_mode)
         scaffold = render_contextual_scaffold(contract)
         variants = {
             "deterministic_transition_sections_only": sections,
@@ -104,6 +120,7 @@ def main() -> None:
                 "patient_disjoint_from_train": ledger.get("patient_disjoint_from_train"),
                 "arm": "geometry_decomposition",
                 "representation_variant": variant,
+                "course_fact_mode": args.course_fact_mode,
                 "generated_text": text,
             })
     with output_path.open("w", encoding="utf-8") as handle:
@@ -113,6 +130,7 @@ def main() -> None:
         "n_cases": len({row["case_id"] for row in rows}),
         "n_rows": len(rows),
         "variants": sorted({row["representation_variant"] for row in rows}),
+        "course_fact_mode": args.course_fact_mode,
         "purpose": "Geometry diagnosis only; these deterministic representations are not synthetic-note candidates.",
     }
     (output_dir / f"{args.output_stem}_summary.json").write_text(json.dumps(summary, indent=2) + "\n")
