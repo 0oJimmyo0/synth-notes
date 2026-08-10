@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Source-linked instruction or follow-up obligation",
+  "type": "object",
+  "required": [
+    "obligation_kind",
+    "action",
+    "source_start",
+    "source_end",
+    "parent_fact_id",
+    "parser_rule"
+  ],
+  "properties": {
+    "obligation_kind": {"enum": ["instruction", "follow_up"]},
+    "action": {"type": "string", "minLength": 1},
+    "target": {"type": ["string", "null"]},
+    "site": {"type": ["string", "null"]},
+    "laterality": {"enum": ["left", "right", "bilateral", "null"]},
+    "frequency": {"type": ["string", "null"]},
+    "duration": {"type": ["string", "null"]},
+    "condition": {"type": ["string", "null"]},
+    "negated": {"type": "boolean"},
+    "provider": {"type": ["string", "null"]},
+    "timing": {"type": ["string", "null"]},
+    "prerequisite_test": {"type": ["string", "null"]},
+    "reason": {"type": ["string", "null"]},
+    "source_start": {"type": "integer", "minimum": 0},
+    "source_end": {"type": "integer", "minimum": 0},
+    "parent_fact_id": {"type": "string", "minLength": 1},
+    "parser_rule": {"type": "string", "minLength": 1}
+  },
+  "additionalProperties": false
+}
