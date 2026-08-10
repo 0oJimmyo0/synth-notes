@@ -2339,6 +2339,12 @@ New package boundary:
 - Source readiness declined with length quintile (Q1--Q5: 38.75%, 36.25%, 38.75%, 23.75%, 20.0%), while conditional source-ready-to-contract-ready conversion was consistently high (87.5%--94.7%). This is descriptive pilot evidence that source completeness/review, rather than final contract routing, is the primary operational bottleneck for longer notes.
 - The 113 contract-ready cases remain a restricted, manually reviewed gold set. Do not render or use them for utility augmentation yet. Next freeze a case-level development/held-out-gold split for an automated ledger-to-contract comparison, preserve all 400-pilot labor measurements, and evaluate automation only on the held-out manually reviewed contracts.
 
+## August 10 contract-automation v1.0 provenance decision
+
+- A case-level contract-automation split is frozen among the 126 manually reviewed source-ready cases: 88 development and 38 held-out gold cases, with 8 and 5 manually excluded cases respectively. No utility outcomes are involved, and held-out gold labels remain unopened for automation evaluation.
+- An exported development-only v1.0 result reported zero false acceptance among eight manually excluded development cases, but the executable, configuration, literal command, and recorded output hash could not be recovered from the working tree, Git history/reflog/unreachable objects, shell history, or job logs. The export is therefore non-reproducible at the executable-artifact level and must not be presented as a validated automation result or used to trigger held-out evaluation.
+- The correct next step is a new v1.1 implementation developed exclusively on the 88 development cases. Version its code/configuration, freeze its development input and command, rerun it deterministically, and only then evaluate the untouched 38 held-out gold cases once. Never reverse-engineer a claimed v1.0 runtime from its output CSV.
+
 ## July 22 MedGemma compact V2 cluster-25 development calibration complete
 
 - Job `2151893` completed in 39 minutes 36 seconds on two A40 GPUs: all 60 cluster-25 development tasks completed across three low-temperature repeats (180 outputs), with batch size two. This demonstrates that the bounded compact workflow is computationally feasible within the six-hour allocation.
