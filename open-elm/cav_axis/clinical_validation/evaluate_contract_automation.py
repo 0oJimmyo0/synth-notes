@@ -109,6 +109,46 @@ def main() -> None:
     candidate_sections = obligations(candidate_required, include_section=True)
     matched_sections = sum((gold_sections & candidate_sections).values())
 
+    # Derived diagnostics deliberately retain counts only, never contract text.
+    section_rows = []
+    all_sections = sorted(
+        set(gold_required.contract_section.map(normalize))
+        | set(candidate_required.contract_section.map(normalize))
+    )
+    for section in all_sections:
+        gold_counter = obligations(
+            gold_required.loc[gold_required.contract_section.map(normalize).eq(section)],
+            include_section=False,
+        )
+        candidate_counter = obligations(
+            candidate_required.loc[candidate_required.contract_section.map(normalize).eq(section)],
+            include_section=False,
+        )
+        matched = sum((gold_counter & candidate_counter).values())
+        gold_count, candidate_count = sum(gold_counter.values()), sum(candidate_counter.values())
+        section_rows.append({
+            "contract_section": section,
+            "gold_required_obligations": gold_count,
+            "automation_required_obligations": candidate_count,
+            "value_matched_obligations": matched,
+            "recall": matched / gold_count if gold_count else None,
+            "precision": matched / candidate_count if candidate_count else None,
+        })
+
+    case_rows = []
+    for case_id in sorted(accepted_case_ids):
+        gold_counter = Counter({key: count for key, count in gold_values.items() if key[0] == case_id})
+        candidate_counter = Counter({key: count for key, count in candidate_values.items() if key[0] == case_id})
+        matched = sum((gold_counter & candidate_counter).values())
+        case_rows.append({
+            "case_id": case_id,
+            "gold_required_obligation_count": sum(gold_counter.values()),
+            "automation_required_obligation_count": sum(candidate_counter.values()),
+            "value_matched_required_obligation_count": matched,
+            "missing_required_obligation_count": sum(gold_counter.values()) - matched,
+            "extra_required_obligation_count": sum(candidate_counter.values()) - matched,
+        })
+
     case_matrix = pd.DataFrame({
         "case_id": decisions.index,
         "automation_decision": decisions.values,
@@ -143,6 +183,8 @@ def main() -> None:
     output_dir = Path(args.output_dir).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
     case_matrix.to_csv(output_dir / "contract_automation_case_matrix.csv", index=False)
+    pd.DataFrame(section_rows).to_csv(output_dir / "contract_automation_section_agreement.csv", index=False)
+    pd.DataFrame(case_rows).to_csv(output_dir / "contract_automation_case_obligation_agreement.csv", index=False)
     (output_dir / "contract_automation_summary.json").write_text(json.dumps(summary, indent=2) + "\n")
     print(json.dumps(summary, indent=2))
 
