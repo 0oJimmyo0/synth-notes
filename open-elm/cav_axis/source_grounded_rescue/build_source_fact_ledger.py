@@ -53,6 +53,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--split_manifest_path", required=True)
     parser.add_argument("--output_dir", required=True)
     parser.add_argument("--source_split", default="test")
+    parser.add_argument(
+        "--source_split_column",
+        default=None,
+        help=(
+            "Optional anchor-manifest column containing the original source split. "
+            "When supplied, provenance is resolved by (source split, dataset row ID) "
+            "rather than dataset row ID alone."
+        ),
+    )
     parser.add_argument("--pickle_dir", default=None)
     parser.add_argument("--max_cases", type=int, default=0, help="Optional deterministic cap; 0 keeps all provided anchors.")
     parser.add_argument("--max_fact_chars", type=int, default=2000)
@@ -149,33 +158,65 @@ def main() -> None:
     if "dataset_row_id" not in anchors.columns:
         raise KeyError("anchor manifest must contain dataset_row_id")
     anchors["dataset_row_id"] = pd.to_numeric(anchors["dataset_row_id"], errors="raise").astype(int)
-    anchors = anchors.drop_duplicates("dataset_row_id").sort_values("dataset_row_id").reset_index(drop=True)
+    if args.source_split_column:
+        if args.source_split_column not in anchors.columns:
+            raise KeyError(f"anchor manifest is missing source split column: {args.source_split_column}")
+        anchors["_anchor_source_split"] = anchors[args.source_split_column].astype(str).str.strip()
+        if anchors["_anchor_source_split"].eq("").any():
+            raise ValueError("anchor source split column contains blank values")
+    else:
+        anchors["_anchor_source_split"] = str(args.source_split)
+    identity_columns = ["_anchor_source_split", "dataset_row_id"]
+    if anchors.duplicated(identity_columns).any():
+        raise ValueError("anchor manifest contains duplicate (source split, dataset row ID) identities")
+    anchors = anchors.sort_values(identity_columns).reset_index(drop=True)
     if args.max_cases:
         anchors = anchors.head(args.max_cases).copy()
 
     split = pd.read_csv(split_path)
     split["dataset_row_id"] = pd.to_numeric(split["dataset_row_id"], errors="raise").astype(int)
-    split = split.loc[split["split"].astype(str) == str(args.source_split)].copy()
-    required = ["dataset_row_id", "note_id", "filename"]
+    split["_anchor_source_split"] = split["split"].astype(str)
+    split = split.loc[split["_anchor_source_split"].isin(set(anchors["_anchor_source_split"]))].copy()
+    required = ["_anchor_source_split", "dataset_row_id", "note_id", "filename"]
     missing = [column for column in required if column not in split.columns]
     if missing:
         raise KeyError(f"split manifest is missing required provenance columns: {missing}")
-    split = split.drop_duplicates("dataset_row_id", keep="first")
+    if split.duplicated(["_anchor_source_split", "dataset_row_id"]).any():
+        raise ValueError("split manifest contains duplicate (source split, dataset row ID) identities")
     anchors_for_source = anchors.drop(columns=["note_id", "filename"], errors="ignore")
-    sources = anchors_for_source.merge(split[required], on="dataset_row_id", how="left", validate="one_to_one")
+    sources = anchors_for_source.merge(
+        split[required], on=["_anchor_source_split", "dataset_row_id"], how="left", validate="one_to_one"
+    )
     if sources[["note_id", "filename"]].isna().any().any():
         raise ValueError("some anchors have no source-note provenance in the requested split")
+    if "note_id" in anchors.columns:
+        expected_note_ids = anchors[["_anchor_source_split", "dataset_row_id", "note_id"]].rename(
+            columns={"note_id": "expected_note_id"}
+        )
+        sources = sources.merge(
+            expected_note_ids, on=["_anchor_source_split", "dataset_row_id"], how="left", validate="one_to_one"
+        )
+        mismatched = sources.expected_note_id.astype(str).str.strip().ne("") & sources.note_id.astype(str).ne(sources.expected_note_id.astype(str))
+        if mismatched.any():
+            raise ValueError("anchor note IDs do not match source-manifest provenance")
+        sources = sources.drop(columns=["expected_note_id"])
 
     explicit_pickle_dir = Path(args.pickle_dir).resolve() if args.pickle_dir else None
     pickle_dir = infer_pickle_dir(dataset_path, explicit_pickle_dir=explicit_pickle_dir)
     if pickle_dir is None:
         raise FileNotFoundError("could not resolve approved pickle_ds_note_hadm_all directory")
-    texts = load_note_texts_for_rows(sources, pickle_dir)
+    # ``dataset_row_id`` is unique only within an original source split. Load
+    # each split separately so same numeric IDs cannot overwrite each other.
+    texts: dict[tuple[str, int], str] = {}
+    for source_split, source_rows in sources.groupby("_anchor_source_split", sort=True):
+        split_texts = load_note_texts_for_rows(source_rows, pickle_dir)
+        texts.update({(str(source_split), int(row_id)): text for row_id, text in split_texts.items()})
 
     ledgers, review_rows, reference_rows = [], [], []
-    for ordinal, row in enumerate(sources.itertuples(index=False), start=1):
-        row_id = int(row.dataset_row_id)
-        text = texts.get(row_id, "")
+    for ordinal, (_, row) in enumerate(sources.iterrows(), start=1):
+        row_id = int(row["dataset_row_id"])
+        source_split = str(row["_anchor_source_split"])
+        text = texts.get((source_split, row_id), "")
         if not text:
             continue
         case_id = f"ledger_{ordinal:03d}"
@@ -199,9 +240,9 @@ def main() -> None:
             "case_id": case_id,
             "source_provenance": {
                 "dataset_row_id": row_id,
-                "note_id": str(row.note_id),
-                "source_split": str(args.source_split),
-                "anchor_id": str(getattr(row, "anchor_id", "")),
+                "note_id": str(row["note_id"]),
+                "source_split": source_split,
+                "anchor_id": str(row.get("anchor_id", "")),
             },
             "facts": facts,
             "security_note": "Contains source-derived spans; retain only on approved MIMIC-IV project storage.",
@@ -210,11 +251,18 @@ def main() -> None:
         reference_rows.append({
             "case_id": case_id,
             "dataset_row_id": row_id,
-            "note_id": str(row.note_id),
+            "note_id": str(row["note_id"]),
+            "source_split": source_split,
             "source_real_note": text,
         })
         for fact in facts:
-            review_rows.append({"case_id": case_id, "dataset_row_id": row_id, "note_id": str(row.note_id), **fact})
+            review_rows.append({
+                "case_id": case_id,
+                "dataset_row_id": row_id,
+                "note_id": str(row["note_id"]),
+                "source_split": source_split,
+                **fact,
+            })
 
     with (output_dir / "source_fact_ledgers.jsonl").open("w", encoding="utf-8") as handle:
         for ledger in ledgers:

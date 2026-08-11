@@ -1,0 +1,48 @@
+policy_id: selective_contract_policy_v1
+scope: development_frozen_policy_for_human_in_the_loop_workload_study
+automation_states:
+  - AUTO_ACCEPT
+  - MANUAL_REVIEW
+  - AUTO_EXCLUDE
+global_auto_accept_requirements:
+  - exact_contiguous_source_span
+  - section_compatible_evidence
+  - schema_valid_representation
+  - no_unknown_or_clipped_fragment
+  - no_conflicting_evidence
+  - no_clinically_meaningful_modifier_ambiguity
+field_policy:
+  principal_diagnosis:
+    default: AUTO_ACCEPT
+    requirements:
+      - direct_principal_diagnosis_source_field
+      - no_negation_or_differential_only_language
+  disposition:
+    default: MANUAL_REVIEW
+    rationale: safety_critical_transition_state
+  discharge_medications:
+    default: MANUAL_REVIEW
+    rationale: active_regimen_and_medication_state_are_high_risk
+  instructions:
+    default: MANUAL_REVIEW
+    rationale: heterogeneous_atomic_representation
+  follow_up:
+    default: MANUAL_REVIEW
+    rationale: provider_timing_prerequisite_relationships_are_heterogeneous
+auto_exclude:
+  allowed_only_when:
+    - deterministic_case_level_source_incompleteness_or_contradiction_rule
+    - no_usable_safe_transition_contract_can_be_created_without_inference
+  otherwise: MANUAL_REVIEW
+prohibited_auto_accept:
+  - active_medication_identity_or_action
+  - medication_dose_route_frequency_duration_or_condition
+  - medication_hold_stop_restart_or_negative_constraint
+  - disposition
+  - actionable_instruction
+  - follow_up
+final_safety_boundary: every_finalized_contract_requires_human_signoff
+development_release_requirements:
+  - zero_observed_unsupported_high_risk_auto_accept_obligations
+  - zero_observed_unsafe_case_auto_clearances
+  - source_span_and_schema_validation_for_all_auto_accept_obligations

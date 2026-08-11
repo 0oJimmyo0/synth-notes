@@ -1,0 +1,39 @@
+policy_id: selective_contract_policy_v2
+scope: identity_safe_development_frozen_policy_for_human_in_the_loop_workload_study
+identity_key:
+  - source_split
+  - dataset_row_id
+automation_states:
+  - MANUAL_REVIEW
+  - AUTO_EXCLUDE
+field_policy:
+  principal_diagnosis:
+    default: MANUAL_REVIEW
+    rationale: diagnosis parents may contain lists, qualifiers, or procedure mixtures and require atomic validation
+  disposition:
+    default: MANUAL_REVIEW
+  discharge_medications:
+    default: MANUAL_REVIEW
+  instructions:
+    default: MANUAL_REVIEW
+  follow_up:
+    default: MANUAL_REVIEW
+auto_exclude:
+  allowed_only_when:
+    - deterministic_case_level_source_incompleteness_or_contradiction_rule
+    - no_usable_safe_transition_contract_can_be_created_without_inference
+  otherwise: MANUAL_REVIEW
+final_contract_dimensions:
+  clinical_priority:
+    - required
+    - optional
+    - historical_context_only
+  render_decision:
+    - render
+    - do_not_render
+source_evidence_rule:
+  primary_span: required_contiguous_source_span
+  corroborating_spans: optional_and_may_only_confirm_the_same_obligation
+fairness_rule: clipped_or_bad_candidate_does_not_force_manual_route_when_assigned_source_is_clear
+final_safety_boundary: every_finalized_contract_requires_human_signoff_and_independent_blinded_safety_adjudication
+stop_rule: stop_and_escalate_the_current_case_only; continue_the_arm_unless_the_protocol_is_suspended
